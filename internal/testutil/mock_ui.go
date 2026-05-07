@@ -9,19 +9,24 @@ var _ commands.UI = (*MockUI)(nil)
 
 // MockUI records all UI interactions for test assertions.
 type MockUI struct {
-	// Select behavior.
-	SelectReturn int
-	SelectErr    error
-	SelectCalls  []string
+	// Select behavior. SelectReturns (when non-empty) is consumed in order
+	// for sequential calls — useful for tests that drive multi-prompt flows.
+	// SelectReturn is the fallback once SelectReturns is exhausted.
+	SelectReturn  int
+	SelectReturns []int
+	SelectErr     error
+	SelectCalls   []string
 
 	// Confirm behavior.
 	ConfirmReturn bool
 	ConfirmErr    error
 
-	// InputText behavior.
-	InputTextReturn string
-	InputTextErr    error
-	InputTextCalls  int
+	// InputText behavior. InputTextReturns (when non-empty) is consumed in
+	// order; InputTextReturn is the fallback.
+	InputTextReturn  string
+	InputTextReturns []string
+	InputTextErr     error
+	InputTextCalls   int
 
 	// EditDocument behavior.
 	EditDocumentReturn string
@@ -53,6 +58,11 @@ type Notification struct {
 
 func (m *MockUI) Select(title string, options []string) (int, error) {
 	m.SelectCalls = append(m.SelectCalls, title)
+	if len(m.SelectReturns) > 0 {
+		v := m.SelectReturns[0]
+		m.SelectReturns = m.SelectReturns[1:]
+		return v, m.SelectErr
+	}
 	return m.SelectReturn, m.SelectErr
 }
 
@@ -62,6 +72,11 @@ func (m *MockUI) Confirm(prompt string) (bool, error) {
 
 func (m *MockUI) InputText(prompt, initial string) (string, error) {
 	m.InputTextCalls++
+	if len(m.InputTextReturns) > 0 {
+		v := m.InputTextReturns[0]
+		m.InputTextReturns = m.InputTextReturns[1:]
+		return v, m.InputTextErr
+	}
 	return m.InputTextReturn, m.InputTextErr
 }
 

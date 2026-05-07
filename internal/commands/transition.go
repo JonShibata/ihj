@@ -38,7 +38,27 @@ func Transition(ctx context.Context, ws *WorkspaceSession, issueKey string) erro
 	}
 
 	newStatus := options[choice]
-	if err := ws.Provider.Update(ctx, issueKey, &core.Changes{Status: &newStatus}); err != nil {
+
+	var issueType string
+	if len(ws.Workspace.TransitionHooks[newStatus]) > 0 {
+		// Predicate evaluation (e.g. `issuetype == Bug`) needs the issue's
+		// type. Skip the round-trip when no hooks are configured for this
+		// status to keep the no-hook fast path identical to the original.
+		item, err := ws.Provider.Get(ctx, issueKey)
+		if err != nil {
+			return fmt.Errorf("fetching %s: %w", issueKey, err)
+		}
+		if item != nil {
+			issueType = item.Type
+		}
+	}
+
+	hookFields, err := runTransitionHooks(ctx, ws, issueKey, newStatus, issueType)
+	if err != nil {
+		return err
+	}
+
+	if err := ws.Provider.Update(ctx, issueKey, &core.Changes{Status: &newStatus, Fields: hookFields}); err != nil {
 		ws.Runtime.UI.Notify("Error", fmt.Sprintf("Failed to move %s", issueKey))
 		return err
 	}

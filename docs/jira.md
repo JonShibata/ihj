@@ -326,6 +326,57 @@ JQL error in workspace 'my-board': '{foo}' is not defined in fields or workspace
 
 Bootstrap also queries Jira's createmeta API for every issue type in the project, discovering all available custom fields. Fields present on every type are promoted to the workspace-level `fields` block; fields unique to a single type are placed in that type's `fields` block. Only fields with recognised plugin types (text, select, date, user picker, etc.) are included — internal or display-only Jira fields are excluded.
 
+## Transition Hooks
+
+Some workflows require extra fields when an issue moves through specific
+states (story points before "In Progress", root cause for "Done" bugs).
+`transition_hooks:` declares per-status prompts that run after the status
+picker; collected values flow into the same write that changes the status.
+
+```yaml
+transition_hooks:
+  "Development in Progress":
+    - field: sprint
+      prompt: Sprint
+      type: sprint
+      required: true
+    - field: estimated_story_points
+      prompt: Estimated Story Points
+      type: text
+      required: true
+  Done:
+    - field: actual_story_points
+      prompt: Actual Story Points
+      type: text
+      required: true
+    - field: dev_fix_release
+      prompt: Dev Fix Release(s)
+      type: csv
+      required: true
+    - field: root_cause_description
+      prompt: Root Cause Description
+      type: text
+      required: true
+      when: "issuetype == Bug"
+    - field: resolution_description
+      prompt: Resolution Description
+      type: text
+      required: true
+      when: "issuetype == Bug"
+```
+
+| Type     | Widget                                              | Stored as                |
+|----------|-----------------------------------------------------|--------------------------|
+| `text`   | Single-line input                                   | string                   |
+| `csv`    | Single-line input split on commas                   | `[]string`               |
+| `select` | Picker from `values:` list                          | string (chosen value)    |
+| `sprint` | Picker over active+future sprints (provider-driven) | sprint ID as string      |
+
+`when:` accepts a single `field == value` predicate. Today only
+`issuetype` is exposed; unknown keys evaluate to `true` so misconfigured
+predicates don't silently drop hooks. Required hooks left blank cancel
+the transition before any change is written.
+
 ## Example Configs
 
 - [Scrum board](../examples/jira-scrum.yaml)

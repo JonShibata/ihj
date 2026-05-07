@@ -50,16 +50,26 @@ type rawServer struct {
 }
 
 type rawWorkspace struct {
-	Server     string              `yaml:"server"` // Server alias (references servers map)
-	Name       string              `yaml:"name"`
-	CacheTTL   string              `yaml:"cache_ttl"`
-	Guidance   string              `yaml:"guidance"` // Removed — detected and rejected with a migration hint.
-	Extract    rawExtractConfig    `yaml:"extract"`
-	Fields     map[string]any      `yaml:"fields,omitempty"` // Workspace-wide field aliases (alias → provider field ID).
-	Types      []rawTypeConfig     `yaml:"types"`
-	Statuses   []rawStatusConfig   `yaml:"statuses"`
-	Priorities []rawPriorityConfig `yaml:"priorities,omitempty"` // Optional sort order; defaults to standard Jira order.
-	Filters    map[string]string   `yaml:"filters"`
+	Server          string                         `yaml:"server"` // Server alias (references servers map)
+	Name            string                         `yaml:"name"`
+	CacheTTL        string                         `yaml:"cache_ttl"`
+	Guidance        string                         `yaml:"guidance"` // Removed — detected and rejected with a migration hint.
+	Extract         rawExtractConfig               `yaml:"extract"`
+	Fields          map[string]any                 `yaml:"fields,omitempty"` // Workspace-wide field aliases (alias → provider field ID).
+	Types           []rawTypeConfig                `yaml:"types"`
+	Statuses        []rawStatusConfig              `yaml:"statuses"`
+	Priorities      []rawPriorityConfig            `yaml:"priorities,omitempty"` // Optional sort order; defaults to standard Jira order.
+	Filters         map[string]string              `yaml:"filters"`
+	TransitionHooks map[string][]rawTransitionHook `yaml:"transition_hooks,omitempty"`
+}
+
+type rawTransitionHook struct {
+	Field    string   `yaml:"field"`
+	Prompt   string   `yaml:"prompt"`
+	Type     string   `yaml:"type"`
+	Required bool     `yaml:"required,omitempty"`
+	When     string   `yaml:"when,omitempty"`
+	Values   []string `yaml:"values,omitempty"`
 }
 
 type rawExtractConfig struct {
@@ -162,6 +172,7 @@ func loadConfig(path string) (configResult, error) {
 	universalKeys := map[string]bool{
 		"server": true, "name": true, "types": true, "statuses": true, "filters": true,
 		"cache_ttl": true, "guidance": true, "extract": true, "fields": true,
+		"transition_hooks": true,
 	}
 
 	// Parse global cache TTL (falls back to core.DefaultCacheTTL).
@@ -261,6 +272,24 @@ func loadConfig(path string) (configResult, error) {
 			}
 		}
 
+		var hooks map[string][]core.TransitionHook
+		if len(rws.TransitionHooks) > 0 {
+			hooks = make(map[string][]core.TransitionHook, len(rws.TransitionHooks))
+			for status, list := range rws.TransitionHooks {
+				out := make([]core.TransitionHook, len(list))
+				for i, h := range list {
+					if h.Field == "" || h.Prompt == "" || h.Type == "" {
+						return configResult{}, fmt.Errorf("workspace '%s' transition_hooks[%q][%d]: field, prompt, type are required", slug, status, i)
+					}
+					out[i] = core.TransitionHook{
+						Field: h.Field, Prompt: h.Prompt, Type: h.Type,
+						Required: h.Required, When: h.When, Values: h.Values,
+					}
+				}
+				hooks[status] = out
+			}
+		}
+
 		workspaces[slug] = &core.Workspace{
 			Slug:             slug,
 			Name:             rws.Name,
@@ -274,6 +303,7 @@ func loadConfig(path string) (configResult, error) {
 			Priorities:       priorities,
 			Filters:          rws.Filters,
 			FieldAliases:     parseIntMap(rws.Fields),
+			TransitionHooks:  hooks,
 			StatusOrderMap:   statusOrderMap,
 			TypeOrderMap:     typeOrderMap,
 			PriorityOrderMap: priorityOrderMap,

@@ -61,6 +61,11 @@ type Workspace struct {
 	// SortItems falls back to the standard Jira ordering.
 	Priorities []PriorityConfig `json:"priorities,omitempty"`
 
+	// TransitionHooks define extra field prompts that run when transitioning
+	// to a specific status. Keyed by target status name (case-sensitive).
+	// Empty/nil for the common case of no extra prompts.
+	TransitionHooks map[string][]TransitionHook `json:"-"`
+
 	// Internal — not serialized for frontend.
 	StatusOrderMap   map[string]StatusOrderEntry `json:"-"`
 	TypeOrderMap     map[string]TypeOrderEntry   `json:"-"`
@@ -156,6 +161,18 @@ func (ws *Workspace) AllFieldDefs() FieldDefs {
 		}
 	}
 	return result
+}
+
+// TransitionHook is one field prompt that fires when an issue is moved
+// to a specific status. Type controls the input widget; When is an optional
+// "field == value" predicate that must hold for the hook to fire.
+type TransitionHook struct {
+	Field    string `json:"field"`              // alias key; maps via Provider field translation on write
+	Prompt   string `json:"prompt"`             // prompt text shown to the user
+	Type     string `json:"type"`               // text | csv | sprint | select
+	Required bool   `json:"required,omitempty"` // empty input cancels the transition
+	When     string `json:"when,omitempty"`     // "field == value", e.g. "issuetype == Bug"
+	Values   []string `json:"values,omitempty"` // only for type=select
 }
 
 // Comment represents a comment on a work item.
