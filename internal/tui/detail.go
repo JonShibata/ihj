@@ -28,7 +28,14 @@ type DetailModel struct {
 	sortedChildren []*core.WorkItem
 	// Linked targets present in the registry, in render order. Hint keys
 	// for these begin AFTER the children (single shared keymap pool).
+	// Entries are nil when the target isn't in the current filter view —
+	// the parallel relatedHintIDs slice still holds the target's ID so
+	// the caller can lazy-fetch it.
 	relatedTargets []*core.WorkItem
+	// Target IDs for every rendered related row (parallel to whatever
+	// relatedTargets[i] would be if it were registry-resident). Used by
+	// NavLinkIDForKey for lazy fetches of off-filter neighbours.
+	relatedHintIDs []string
 	// Available single-key hints for child navigation (computed from keymap).
 	hintKeys []rune
 }
@@ -43,6 +50,18 @@ func NewDetailModel(styles *terminal.Styles, registry map[string]*core.WorkItem,
 		ws:       ws,
 		hintKeys: keys.HintKeys(),
 	}
+}
+
+// AppendLinks adds extra Link entries to the currently displayed issue
+// and re-renders the detail pane. Used by the siblings lazy-fetch flow
+// to inject parent-derived sibling rows after they arrive from the API.
+// No-op when there's no current issue or links is empty.
+func (m *DetailModel) AppendLinks(links []core.Link) {
+	if m.issue == nil || len(links) == 0 {
+		return
+	}
+	m.issue.Links = append(m.issue.Links, links...)
+	m.rebuildContent()
 }
 
 // SetIssue updates the displayed issue and re-renders content.
@@ -140,10 +159,9 @@ func (m *DetailModel) ChildIndexForKey(r rune) int {
 }
 
 // NavTargetForKey resolves a hint key against the unified children + related
-// pool, returning the target WorkItem or nil. Hint keys are assigned in the
-// order children are rendered, then the related-table entries that exist in
-// the registry. Use this from the key handler so a single press jumps to
-// either kind without the caller knowing which section owns the key.
+// pool, returning the target WorkItem if it's in the current registry.
+// Returns nil for related rows whose target isn't loaded — use
+// NavLinkIDForKey in that case to drive a lazy fetch.
 func (m *DetailModel) NavTargetForKey(r rune) *core.WorkItem {
 	for i, hint := range m.hintKeys {
 		if hint != r {
@@ -159,6 +177,27 @@ func (m *DetailModel) NavTargetForKey(r rune) *core.WorkItem {
 		return nil
 	}
 	return nil
+}
+
+// NavLinkIDForKey returns the related-link target ID associated with a
+// hint key, regardless of whether the target is in the registry. Empty
+// string means the hint maps to a child (not a link) or to nothing at
+// all — caller should treat that as "not handled".
+func (m *DetailModel) NavLinkIDForKey(r rune) string {
+	for i, hint := range m.hintKeys {
+		if hint != r {
+			continue
+		}
+		if i < len(m.sortedChildren) {
+			return ""
+		}
+		j := i - len(m.sortedChildren)
+		if j < len(m.relatedHintIDs) {
+			return m.relatedHintIDs[j]
+		}
+		return ""
+	}
+	return ""
 }
 
 // Breadcrumb returns a display string showing the navigation path.

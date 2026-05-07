@@ -71,6 +71,14 @@ type SprintLister interface {
 	ListSprints(ctx context.Context, states []string) ([]Sprint, error)
 }
 
+// ChildrenLister is an optional capability — returns the direct children
+// of a parent issue regardless of whether they're loaded in the current
+// filter view. Used by the detail pane to surface siblings (the other
+// children of the displayed issue's parent) on demand.
+type ChildrenLister interface {
+	Children(ctx context.Context, parentKey string) ([]*WorkItem, error)
+}
+
 // User represents an authenticated user across any backend.
 type User struct {
 	ID          string `json:"id"` // Backend-specific ID (accountId for Jira, login for GitHub)

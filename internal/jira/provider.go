@@ -211,6 +211,22 @@ func (p *Provider) Update(ctx context.Context, id string, changes *core.Changes)
 	return nil
 }
 
+// Children implements core.ChildrenLister. Runs JQL `parent = <key>`
+// against the active project and returns the matching items. The result
+// is uncached — siblings are usually a small set and the call only fires
+// when the user lands on an issue whose parent isn't in the current view.
+func (p *Provider) Children(ctx context.Context, parentKey string) ([]*core.WorkItem, error) {
+	if parentKey == "" {
+		return nil, nil
+	}
+	jql := fmt.Sprintf(`parent = "%s"`, parentKey)
+	issues, err := fetchAllIssues(ctx, p.client, jql, p.cfg.FormattedFields, p.customFieldIDs())
+	if err != nil {
+		return nil, err
+	}
+	return issuesToWorkItems(issues, p.wellKnown, p.customFieldMap()), nil
+}
+
 // ListSprints implements core.SprintLister. Returns sprints for the
 // workspace's board filtered by state. An empty states slice returns all.
 func (p *Provider) ListSprints(ctx context.Context, states []string) ([]core.Sprint, error) {

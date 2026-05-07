@@ -66,6 +66,25 @@ type commandCompleteMsg struct {
 	err error
 }
 
+// relatedFetchedMsg carries the result of a lazy Provider.Get fired when
+// the user hits a hint key for a related issue that isn't in the current
+// filter view. Item is non-nil on success.
+type relatedFetchedMsg struct {
+	id   string
+	item *core.WorkItem
+	err  error
+}
+
+// siblingsFetchedMsg carries the result of a "load siblings" fetch fired
+// when the user opens an issue whose parent isn't in the current filter
+// view. forIssue is the issue whose detail pane should be updated;
+// items are the parent's children (current issue filtered out).
+type siblingsFetchedMsg struct {
+	forIssue string
+	items    []*core.WorkItem
+	err      error
+}
+
 // workspaceSwitchedMsg carries the result of a workspace switch request.
 type workspaceSwitchedMsg struct {
 	slug      string

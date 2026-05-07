@@ -27,6 +27,12 @@ const (
 	// Children table column truncation limits.
 	maxChildTypeWidth   = 10
 	maxChildStatusWidth = 14
+
+	// relatedNonSummaryWidth is a rough budget of the non-summary cells
+	// in the related table: tree(2) + id(~12) + relType(~14) + type(~10)
+	// + status(~16) + hint(~5) + 6 cell paddings. Used to derive the
+	// summary truncation cap so the hint stays on-screen at narrow widths.
+	relatedNonSummaryWidth = 70
 )
 
 // Children table column indices.
@@ -233,6 +239,7 @@ func (m *DetailModel) renderChildrenTable(buf *strings.Builder, divider string) 
 // (you'd need to switch filters to bring them into view first).
 func (m *DetailModel) renderRelatedTable(buf *strings.Builder, divider string) {
 	m.relatedTargets = nil
+	m.relatedHintIDs = nil
 	issue := m.issue
 	if issue == nil {
 		return
@@ -256,17 +263,32 @@ func (m *DetailModel) renderRelatedTable(buf *strings.Builder, divider string) {
 	buf.WriteString(styles.ChildSection.Render(core.IconRelated+"RELATED ISSUES") + "\n")
 
 	hintBase := len(m.sortedChildren)
+	// Budget the summary column so the trailing hint always fits at the
+	// right edge. Without this cap lipgloss wraps the summary on narrow
+	// terminals, pushing the hint off-screen — and the related table is
+	// wider than the children table because the relation column is up
+	// to 13 chars ("is blocked by"), not just a 2-char priority icon.
+	rowWidth := m.viewport.Width()
+	if rowWidth <= 0 {
+		rowWidth = m.width
+	}
+	maxRelatedSummaryWidth := rowWidth - relatedNonSummaryWidth
+	if maxRelatedSummaryWidth < 20 {
+		maxRelatedSummaryWidth = 20
+	}
+
 	var rows [][]string
 	for _, l := range links {
 		target := m.registry[l.Target]
+		// Every link gets a hint slot — if the target isn't in the
+		// registry, NavLinkIDForKey will surface the ID for a lazy fetch.
+		idx := hintBase + len(m.relatedHintIDs)
 		hint := ""
-		if target != nil {
-			idx := hintBase + len(m.relatedTargets)
-			if idx < len(m.hintKeys) {
-				hint = fmt.Sprintf("[%c]", m.hintKeys[idx])
-			}
-			m.relatedTargets = append(m.relatedTargets, target)
+		if idx < len(m.hintKeys) {
+			hint = fmt.Sprintf("[%c]", m.hintKeys[idx])
 		}
+		m.relatedTargets = append(m.relatedTargets, target)
+		m.relatedHintIDs = append(m.relatedHintIDs, l.Target)
 
 		summary := l.TargetSummary
 		typeName := l.TargetType
@@ -282,6 +304,9 @@ func (m *DetailModel) renderRelatedTable(buf *strings.Builder, divider string) {
 		}
 		if len(statusName) > maxChildStatusWidth {
 			statusName = statusName[:maxChildStatusWidth]
+		}
+		if len(summary) > maxRelatedSummaryWidth {
+			summary = summary[:maxRelatedSummaryWidth-1] + "…"
 		}
 		statusIcon := ""
 		if statusName != "" {

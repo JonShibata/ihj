@@ -59,8 +59,8 @@ func (m AppModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	// ── Navigation and child hint keys ──
 
-	if handled := m.handleNavigation(msg); handled {
-		return m, nil
+	if handled, cmd := m.handleNavigation(msg); handled {
+		return m, cmd
 	}
 
 	// ── Search input fallthrough ──
@@ -101,99 +101,123 @@ func (m AppModel) handleBackspace() (tea.Model, tea.Cmd) {
 // ── Navigation ──────────────────────────────────────────────────
 
 // handleNavigation processes cursor movement and child hint keys.
-// Returns true if the key was handled.
-func (m *AppModel) handleNavigation(msg tea.KeyPressMsg) bool {
+// Returns (handled, cmd) — cmd is non-nil when a related-issue hint
+// kicks off a lazy fetch or when changing the list selection triggers
+// a siblings fetch for the new issue's parent.
+func (m *AppModel) handleNavigation(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 	if m.view >= ViewDetail {
 		return m.handleDetailNavigation(msg)
 	}
 	return m.handleListNavigation(msg)
 }
 
-func (m *AppModel) handleDetailNavigation(msg tea.KeyPressMsg) bool {
+func (m *AppModel) handleDetailNavigation(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 	keys := m.keys
 
 	switch {
 	case key.Matches(msg, keys.Up), key.Matches(msg, keys.DetailUp):
 		m.detail.ScrollUp(scrollLines)
-		return true
+		return true, nil
 	case key.Matches(msg, keys.Down), key.Matches(msg, keys.DetailDown):
 		m.detail.ScrollDown(scrollLines)
-		return true
+		return true, nil
 	case key.Matches(msg, keys.PageUp):
 		m.detail.ScrollUp(m.detailContentH)
-		return true
+		return true, nil
 	case key.Matches(msg, keys.PageDn):
 		m.detail.ScrollDown(m.detailContentH)
-		return true
+		return true, nil
 	case key.Matches(msg, keys.Home):
 		m.detail.ScrollToTop()
-		return true
+		return true, nil
 	case key.Matches(msg, keys.End):
 		m.detail.ScrollToBottom()
-		return true
+		return true, nil
 	}
 
 	// Hint keys navigate to child issues.
 	return m.tryChildNavigation(msg)
 }
 
-func (m *AppModel) tryChildNavigation(msg tea.KeyPressMsg) bool {
+func (m *AppModel) tryChildNavigation(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 	pressed := msg.String()
 	if len([]rune(pressed)) != 1 {
-		return false
+		return false, nil
 	}
-	target := m.detail.NavTargetForKey([]rune(pressed)[0])
-	if target == nil {
-		return false
+	r := []rune(pressed)[0]
+
+	// Fast path: target is in the current registry — navigate immediately.
+	if target := m.detail.NavTargetForKey(r); target != nil {
+		m.detail.NavigateTo(target)
+		m.recalcLayout()
+		if issue := m.detail.Issue(); issue != nil {
+			m.ui.Emit(EventNavigated, "id", issue.ID, "breadcrumb", m.detail.Breadcrumb())
+		}
+		return true, m.maybeFetchSiblings()
 	}
-	m.detail.NavigateTo(target)
-	m.recalcLayout()
-	if issue := m.detail.Issue(); issue != nil {
-		m.ui.Emit(EventNavigated, "id", issue.ID, "breadcrumb", m.detail.Breadcrumb())
+
+	// Lazy path: hint maps to a related issue that's outside the current
+	// filter view. Kick off a Provider.Get and let the message handler
+	// navigate when the item arrives.
+	id := m.detail.NavLinkIDForKey(r)
+	if id == "" {
+		return false, nil
 	}
-	return true
+	m.setNotify("Loading " + id + "…")
+	return true, m.fetchRelated(id)
 }
 
-func (m *AppModel) handleListNavigation(msg tea.KeyPressMsg) bool {
+// fetchRelated returns a tea.Cmd that fetches the named issue via the
+// active provider and ships the result back as a relatedFetchedMsg.
+func (m AppModel) fetchRelated(id string) tea.Cmd {
+	provider := m.wsSess.Provider
+	ctx := m.ctx
+	return func() tea.Msg {
+		item, err := provider.Get(ctx, id)
+		return relatedFetchedMsg{id: id, item: item, err: err}
+	}
+}
+
+func (m *AppModel) handleListNavigation(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 	keys := m.keys
+	moved := func() tea.Cmd {
+		m.syncDetail()
+		return m.maybeFetchSiblings()
+	}
 
 	switch {
 	case key.Matches(msg, keys.Up):
 		if m.list.cursor > 0 {
 			m.list.cursor--
-			m.syncDetail()
+			return true, moved()
 		}
-		return true
+		return true, nil
 	case key.Matches(msg, keys.Down):
 		if m.list.cursor < len(m.list.filtered)-1 {
 			m.list.cursor++
-			m.syncDetail()
+			return true, moved()
 		}
-		return true
+		return true, nil
 	case key.Matches(msg, keys.Home):
 		m.list.cursor = 0
-		m.syncDetail()
-		return true
+		return true, moved()
 	case key.Matches(msg, keys.End):
 		m.list.cursor = max(0, len(m.list.filtered)-1)
-		m.syncDetail()
-		return true
+		return true, moved()
 	case key.Matches(msg, keys.PageUp):
 		m.list.cursor = max(0, m.list.cursor-m.list.visibleRows())
-		m.syncDetail()
-		return true
+		return true, moved()
 	case key.Matches(msg, keys.PageDn):
 		m.list.cursor = min(len(m.list.filtered)-1, m.list.cursor+m.list.visibleRows())
-		m.syncDetail()
-		return true
+		return true, moved()
 	case key.Matches(msg, keys.DetailUp):
 		m.detail.ScrollUp(scrollLines)
-		return true
+		return true, nil
 	case key.Matches(msg, keys.DetailDown):
 		m.detail.ScrollDown(scrollLines)
-		return true
+		return true, nil
 	}
-	return false
+	return false, nil
 }
 
 // ── Search ──────────────────────────────────────────────────────

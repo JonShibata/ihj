@@ -91,6 +91,12 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case commandCompleteMsg:
 		return m.handleCommandComplete(msg)
 
+	case relatedFetchedMsg:
+		return m.handleRelatedFetched(msg)
+
+	case siblingsFetchedMsg:
+		return m.handleSiblingsFetched(msg)
+
 	// ── Data lifecycle ──
 	case userFetchedMsg:
 		if msg.err == nil && msg.displayName != "" {
@@ -223,6 +229,36 @@ func (m *AppModel) syncDetail() {
 	}
 }
 
+// maybeFetchSiblings returns a Provider.Children fetch when the currently
+// displayed issue has a parent that isn't in the registry AND no sibling
+// links have been loaded for it yet. Returns nil when no fetch is needed
+// (no parent, parent already in registry, or siblings already injected).
+func (m *AppModel) maybeFetchSiblings() tea.Cmd {
+	issue := m.detail.Issue()
+	if issue == nil || issue.ParentID == "" {
+		return nil
+	}
+	if _, inReg := m.registry[issue.ParentID]; inReg {
+		return nil // siblings already derived from the registry
+	}
+	for _, l := range issue.Links {
+		if l.RelType == "sibling" {
+			return nil // already fetched once
+		}
+	}
+	lister, ok := m.wsSess.Provider.(core.ChildrenLister)
+	if !ok {
+		return nil
+	}
+	parentKey := issue.ParentID
+	issueID := issue.ID
+	ctx := m.ctx
+	return func() tea.Msg {
+		items, err := lister.Children(ctx, parentKey)
+		return siblingsFetchedMsg{forIssue: issueID, items: items, err: err}
+	}
+}
+
 // ── Bridge editor ───────────────────────────────────────────────
 
 // handleBridgeEditDoc prepares the editor and returns tea.ExecProcess to
@@ -263,6 +299,57 @@ func (m AppModel) handleCommandComplete(msg commandCompleteMsg) (tea.Model, tea.
 	return m, m.fetchData(m.filter, fetchOpts{silent: true})
 }
 
+// handleSiblingsFetched injects sibling rows derived from a Children()
+// fetch into the displayed issue. Errors and "no siblings" are silent —
+// the user simply doesn't see any sibling rows in those cases.
+func (m AppModel) handleSiblingsFetched(msg siblingsFetchedMsg) (tea.Model, tea.Cmd) {
+	if msg.err != nil || len(msg.items) == 0 {
+		return m, nil
+	}
+	current := m.detail.Issue()
+	if current == nil || current.ID != msg.forIssue {
+		// User navigated away before the fetch returned — drop silently.
+		return m, nil
+	}
+	links := make([]core.Link, 0, len(msg.items)-1)
+	for _, sib := range msg.items {
+		if sib == nil || sib.ID == current.ID {
+			continue
+		}
+		links = append(links, core.Link{
+			RelType:       "sibling",
+			RelOrder:      4,
+			Target:        sib.ID,
+			TargetSummary: sib.Summary,
+			TargetType:    sib.Type,
+			TargetStatus:  sib.Status,
+		})
+	}
+	m.detail.AppendLinks(links)
+	return m, nil
+}
+
+// handleRelatedFetched navigates the detail pane to a freshly-fetched
+// related issue. The fetched item isn't in the current filter view's
+// registry, so it's pushed onto the detail history directly — Backspace
+// returns to the previous issue, and a refresh on the new issue would
+// fail (it isn't in m.registry), which is fine for this drill-in flow.
+func (m AppModel) handleRelatedFetched(msg relatedFetchedMsg) (tea.Model, tea.Cmd) {
+	if msg.err != nil {
+		m.setNotify("Failed to load " + msg.id + ": " + msg.err.Error())
+		return m, nil
+	}
+	if msg.item == nil {
+		m.setNotify(msg.id + " not found")
+		return m, nil
+	}
+	m.detail.NavigateTo(msg.item)
+	m.recalcLayout()
+	m.setNotify("Loaded " + msg.id)
+	m.ui.Emit(EventNavigated, "id", msg.item.ID, "breadcrumb", m.detail.Breadcrumb())
+	return m, m.maybeFetchSiblings()
+}
+
 // ── Data lifecycle ──────────────────────────────────────────────
 
 // handleDataReloaded processes fresh issue data after a filter switch or refresh.
@@ -288,7 +375,7 @@ func (m AppModel) handleDataReloaded(msg dataReloadedMsg) (tea.Model, tea.Cmd) {
 	if !msg.silent {
 		m.setNotify(fmt.Sprintf("Loaded %d issues (%s)", len(msg.items), strings.ToUpper(msg.filter)))
 	}
-	return m, nil
+	return m, m.maybeFetchSiblings()
 }
 
 // handleWorkspaceSwitched processes the result of a workspace switch request.

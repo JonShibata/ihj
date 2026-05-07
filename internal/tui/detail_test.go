@@ -829,11 +829,20 @@ func TestDetailRelatedNavigation(t *testing.T) {
 		t.Errorf("second hint: want PROJ-11, got %q", gotID)
 	}
 
-	// Non-registry link must NOT consume a hint.
-	for _, h := range keys.HintKeys() {
-		if got := dm.NavTargetForKey(h); got != nil && got.ID == "PROJ-99" {
-			t.Errorf("PROJ-99 should not be navigable (not in registry)")
-		}
+	// Non-registry link consumes a hint but resolves through the lazy-
+	// fetch path: NavTargetForKey returns nil, NavLinkIDForKey returns
+	// the target ID so the caller can issue a Provider.Get.
+	thirdHint := keys.HintKeys()[2]
+	if got := dm.NavTargetForKey(thirdHint); got != nil {
+		t.Errorf("non-registry hint should return nil from NavTargetForKey; got %q", got.ID)
+	}
+	if id := dm.NavLinkIDForKey(thirdHint); id != "PROJ-99" {
+		t.Errorf("NavLinkIDForKey for non-registry hint = %q; want PROJ-99", id)
+	}
+
+	// Sanity: child-position hints don't have link IDs.
+	if id := dm.NavLinkIDForKey('!'); id != "" {
+		t.Errorf("unbound hint should yield empty link ID; got %q", id)
 	}
 }
 

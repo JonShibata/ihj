@@ -8,8 +8,10 @@ import (
 
 // handleKeyVim routes key presses through the vim modal system.
 func (m AppModel) handleKeyVim(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	// Ctrl+C always quits regardless of mode.
-	if key.Matches(msg, m.keys.Quit) {
+	// Ctrl+C always quits regardless of mode. The Quit binding may also
+	// list `q`, but plain `q` must flow through to capture-mode handlers
+	// (e.g. typing `:q` shouldn't fire on the bare `q` key).
+	if msg.String() == "ctrl+c" {
 		return m, m.quitCmd()
 	}
 
@@ -19,6 +21,10 @@ func (m AppModel) handleKeyVim(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case CaptureCommand:
 		return m.handleVimCommand(msg)
 	default:
+		// Normal-mode `q` (or any other key in the Quit binding) quits.
+		if key.Matches(msg, m.keys.Quit) {
+			return m, m.quitCmd()
+		}
 		return m.handleVimNormal(msg)
 	}
 }
@@ -95,8 +101,8 @@ func (m AppModel) handleVimNormal(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 
 	// Navigation and child hint keys (shared with default mode).
-	if handled := m.handleNavigation(msg); handled {
-		return m, nil
+	if handled, cmd := m.handleNavigation(msg); handled {
+		return m, cmd
 	}
 
 	return m, nil

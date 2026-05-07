@@ -136,8 +136,8 @@ func (k KeyMap) allBindings() []key.Binding {
 func VimKeyMap() KeyMap {
 	return KeyMap{
 		Quit: key.NewBinding(
-			key.WithKeys("ctrl+c"),
-			key.WithHelp("ctrl+c", "Quit"),
+			key.WithKeys("q", "ctrl+c"),
+			key.WithHelp("q/ctrl+c", "Quit"),
 		),
 		Help: key.NewBinding(
 			key.WithKeys("?"),
