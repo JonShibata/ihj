@@ -189,15 +189,20 @@ func (m AppModel) executeView() (tea.Model, tea.Cmd, bool) {
 }
 
 // buildViewProcess parses a view_command template (whitespace-separated
-// tokens, with {key} substituted) into an *exec.Cmd. Inherits stdio so
-// the viewer paints directly to the user's terminal.
-func buildViewProcess(template, issueKey string) (*exec.Cmd, error) {
+// tokens) into an *exec.Cmd. Substitutes value into both {key} and
+// {path} placeholders — issue-view templates use {key}, attachment
+// viewers use {path}, but only one appears per template, so a single
+// substitution value is unambiguous. Inherits stdio so the viewer
+// paints directly to the user's terminal.
+func buildViewProcess(template, value string) (*exec.Cmd, error) {
 	tokens := strings.Fields(template)
 	if len(tokens) == 0 {
 		return nil, fmt.Errorf("empty view_command")
 	}
 	for i, tok := range tokens {
-		tokens[i] = strings.ReplaceAll(tok, "{key}", issueKey)
+		tok = strings.ReplaceAll(tok, "{key}", value)
+		tok = strings.ReplaceAll(tok, "{path}", value)
+		tokens[i] = tok
 	}
 	cmd := exec.Command(tokens[0], tokens[1:]...)
 	cmd.Stdin = os.Stdin

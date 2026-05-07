@@ -39,6 +39,7 @@ type API interface {
 	SearchUsers(ctx context.Context, query string) ([]user, error)
 	FetchCreateMetaIssueTypes(ctx context.Context, projectKey string) ([]createMetaIssueType, error)
 	FetchCreateMetaFields(ctx context.Context, projectKey string, issueTypeID string) ([]createMetaField, error)
+	DownloadTo(ctx context.Context, url string, dst io.Writer) error
 }
 
 // Compile-time check that *Client implements API.
@@ -303,6 +304,35 @@ func (c *Client) FetchCreateMetaFields(ctx context.Context, projectKey string, i
 	}
 
 	return all, nil
+}
+
+// DownloadTo streams an authenticated GET to the given writer. The url
+// can be absolute (Jira returns absolute attachment URLs) or relative
+// to the configured server.
+func (c *Client) DownloadTo(ctx context.Context, url string, dst io.Writer) error {
+	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
+		url = c.Server + url
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return err
+	}
+	if c.token != "" {
+		req.Header.Set("Authorization", "Basic "+c.token)
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("downloading %s: %w", url, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode >= 400 {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		return &apiError{StatusCode: resp.StatusCode, Body: string(body), Method: "GET", Path: url}
+	}
+	if _, err := io.Copy(dst, resp.Body); err != nil {
+		return fmt.Errorf("streaming %s: %w", url, err)
+	}
+	return nil
 }
 
 func (c *Client) get(ctx context.Context, path string, dest any) error {

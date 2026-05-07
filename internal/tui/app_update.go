@@ -97,6 +97,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case siblingsFetchedMsg:
 		return m.handleSiblingsFetched(msg)
 
+	case attachmentReadyMsg:
+		return m.handleAttachmentReady(msg)
+
 	// ── Data lifecycle ──
 	case userFetchedMsg:
 		if msg.err == nil && msg.displayName != "" {
@@ -297,6 +300,27 @@ func (m AppModel) handleCommandComplete(msg commandCompleteMsg) (tea.Model, tea.
 	}
 	// Reload data from API to pick up any changes.
 	return m, m.fetchData(m.filter, fetchOpts{silent: true})
+}
+
+// handleAttachmentReady suspends the TUI and runs the configured viewer
+// against the freshly-downloaded tempfile. Cleanup deletes the file
+// when the viewer exits.
+func (m AppModel) handleAttachmentReady(msg attachmentReadyMsg) (tea.Model, tea.Cmd) {
+	process, err := buildViewProcess(msg.viewCommand, msg.path)
+	if err != nil {
+		_ = os.Remove(msg.path)
+		m.setNotify("Viewer failed: " + err.Error())
+		return m, nil
+	}
+	filename := msg.filename
+	path := msg.path
+	return m, tea.ExecProcess(process, func(err error) tea.Msg {
+		_ = os.Remove(path)
+		if err != nil {
+			return notifyMsg{title: "Viewer failed", message: err.Error()}
+		}
+		return notifyMsg{title: "Viewed", message: filename}
+	})
 }
 
 // handleSiblingsFetched injects sibling rows derived from a Children()

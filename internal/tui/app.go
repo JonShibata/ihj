@@ -109,6 +109,11 @@ type AppModel struct {
 	capture InputCapture // Where keystrokes are routed (only non-None in vim mode).
 	cmdBuf  string       // Buffer for ":" command input in command mode.
 
+	// pendingHint accumulates the first character of a multi-char hint key
+	// while the handler waits for the next press to complete it. Reset on
+	// Esc, Backspace, or any keypress that isn't a valid hint continuation.
+	pendingHint string
+
 	// Help bubble — renders key bindings with width-aware truncation.
 	help        help.Model
 	showHelp    bool // Toggle full help view via '?'.

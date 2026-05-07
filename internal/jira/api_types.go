@@ -31,6 +31,7 @@ type issueFields struct {
 	Components  []component     `json:"components"`
 	Comment     *commentPage    `json:"comment,omitempty"`
 	IssueLinks  []issueLink     `json:"issuelinks,omitempty"`
+	Attachment  []attachment    `json:"attachment,omitempty"`
 	Created     string          `json:"created"`
 	Updated     string          `json:"updated"`
 
@@ -117,10 +118,10 @@ type parentRef struct {
 // relationship the parent issue sits.
 // Spec ref: IssueLink
 type issueLink struct {
-	ID           string         `json:"id"`
-	Type         issueLinkType  `json:"type"`
-	InwardIssue  *linkedIssue   `json:"inwardIssue,omitempty"`
-	OutwardIssue *linkedIssue   `json:"outwardIssue,omitempty"`
+	ID           string        `json:"id"`
+	Type         issueLinkType `json:"type"`
+	InwardIssue  *linkedIssue  `json:"inwardIssue,omitempty"`
+	OutwardIssue *linkedIssue  `json:"outwardIssue,omitempty"`
 }
 
 // issueLinkType holds the human-readable relationship names.
@@ -140,6 +141,15 @@ type linkedIssue struct {
 		Status    status    `json:"status"`
 		IssueType issueType `json:"issuetype"`
 	} `json:"fields,omitempty"`
+}
+
+// attachment represents one file uploaded to a Jira issue.
+// Spec ref: Attachment
+type attachment struct {
+	ID       string `json:"id"`
+	Filename string `json:"filename"`
+	MimeType string `json:"mimeType,omitempty"`
+	Content  string `json:"content,omitempty"` // authenticated download URL
 }
 
 // component represents a project component.

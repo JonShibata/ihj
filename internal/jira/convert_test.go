@@ -94,7 +94,7 @@ func TestIssuesToWorkItems_LinksFromIssueLinksAndParent(t *testing.T) {
 		},
 		IssueLinks: []issueLink{
 			{
-				Type:        issueLinkType{Name: "Blocks", Outward: "blocks", Inward: "is blocked by"},
+				Type: issueLinkType{Name: "Blocks", Outward: "blocks", Inward: "is blocked by"},
 				OutwardIssue: &linkedIssue{Key: "DOWN-1", Fields: &struct {
 					Summary   string    `json:"summary"`
 					Status    status    `json:"status"`
@@ -102,7 +102,7 @@ func TestIssuesToWorkItems_LinksFromIssueLinksAndParent(t *testing.T) {
 				}{Summary: "Downstream", Status: status{Name: "To Do"}, IssueType: issueType{Name: "Task"}}},
 			},
 			{
-				Type:        issueLinkType{Name: "Blocks", Outward: "blocks", Inward: "is blocked by"},
+				Type: issueLinkType{Name: "Blocks", Outward: "blocks", Inward: "is blocked by"},
 				InwardIssue: &linkedIssue{Key: "UP-1", Fields: &struct {
 					Summary   string    `json:"summary"`
 					Status    status    `json:"status"`

@@ -259,6 +259,55 @@ func TestHintKeys_VimMode_HasFewerThanDefault(t *testing.T) {
 	}
 }
 
+func TestHints_FitsInAlphabet_AllSingleChar(t *testing.T) {
+	km := terminal.DefaultKeyMap()
+	hints := km.Hints(10)
+	if len(hints) != 10 {
+		t.Fatalf("Hints(10) returned %d, want 10", len(hints))
+	}
+	for i, h := range hints {
+		if len(h) != 1 {
+			t.Errorf("hints[%d] = %q; want 1-char label", i, h)
+		}
+	}
+}
+
+func TestHints_OverflowsAlphabet_AllTwoChar(t *testing.T) {
+	km := terminal.DefaultKeyMap()
+	alpha := km.HintKeys()
+	hints := km.Hints(len(alpha) + 1)
+	if len(hints) != len(alpha)+1 {
+		t.Fatalf("Hints(%d) returned %d", len(alpha)+1, len(hints))
+	}
+	for i, h := range hints {
+		if len(h) != 2 {
+			t.Errorf("hints[%d] = %q; want 2-char label", i, h)
+		}
+		for _, r := range h {
+			if r < 'a' || r > 'z' {
+				t.Errorf("hints[%d] = %q; want letters-only in 2-char fallback", i, h)
+			}
+		}
+	}
+	seen := map[string]bool{}
+	for _, h := range hints {
+		if seen[h] {
+			t.Errorf("duplicate hint %q in 2-char fallback", h)
+		}
+		seen[h] = true
+	}
+}
+
+func TestHints_ZeroOrNegative_ReturnsNil(t *testing.T) {
+	km := terminal.DefaultKeyMap()
+	if h := km.Hints(0); h != nil {
+		t.Errorf("Hints(0) = %v; want nil", h)
+	}
+	if h := km.Hints(-1); h != nil {
+		t.Errorf("Hints(-1) = %v; want nil", h)
+	}
+}
+
 func TestHintKeys_NoDuplicates(t *testing.T) {
 	for _, tt := range []struct {
 		name string

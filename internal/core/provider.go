@@ -79,6 +79,14 @@ type ChildrenLister interface {
 	Children(ctx context.Context, parentKey string) ([]*WorkItem, error)
 }
 
+// AttachmentDownloader is an optional capability — fetches an attachment
+// to a local file path using the provider's credentials. The TUI uses
+// this to materialise an image before invoking the configured viewer.
+// Callers are responsible for removing the file when done.
+type AttachmentDownloader interface {
+	DownloadAttachment(ctx context.Context, url, suggestedName string) (path string, err error)
+}
+
 // User represents an authenticated user across any backend.
 type User struct {
 	ID          string `json:"id"` // Backend-specific ID (accountId for Jira, login for GitHub)

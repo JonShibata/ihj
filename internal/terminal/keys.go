@@ -85,6 +85,45 @@ func (k KeyMap) FullHelp() [][]key.Binding {
 	}
 }
 
+// Hints returns n hint labels of uniform length. When n fits the
+// single-char alphabet (digits + letters not bound elsewhere) every label
+// is one character. Past that, every label is a two-character string drawn
+// from the letters-only subset of the alphabet — uniform length keeps the
+// input state machine trivial (always exactly hl chars per hint, where hl
+// is HintLabelLength). Two-char labels avoid digits because the number row
+// is awkward to reach twice in quick succession.
+func (k KeyMap) Hints(n int) []string {
+	alpha := k.HintKeys()
+	if n <= 0 || len(alpha) == 0 {
+		return nil
+	}
+	if n <= len(alpha) {
+		out := make([]string, n)
+		for i := 0; i < n; i++ {
+			out[i] = string(alpha[i])
+		}
+		return out
+	}
+
+	// Overflow: 2-char labels using letters only.
+	letters := make([]rune, 0, len(alpha))
+	for _, r := range alpha {
+		if r >= 'a' && r <= 'z' {
+			letters = append(letters, r)
+		}
+	}
+	out := make([]string, 0, n)
+	for _, c1 := range letters {
+		for _, c2 := range letters {
+			out = append(out, string([]rune{c1, c2}))
+			if len(out) == n {
+				return out
+			}
+		}
+	}
+	return out
+}
+
 // HintKeys returns the available single-key hints for child issue navigation.
 // It generates candidates 0-9 then a-z, excluding any key already bound in
 // the keymap. This ensures hints don't collide with actions or navigation.

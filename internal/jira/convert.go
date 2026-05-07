@@ -81,11 +81,32 @@ func issuesToWorkItems(issues []issue, wk wellKnownFields, customFields map[stri
 		}
 
 		item.Links = buildLinks(f)
+		item.Attachments = buildAttachments(f)
 
 		items = append(items, item)
 	}
 
 	return items
+}
+
+// buildAttachments projects the raw Jira attachment array into core.Attachments.
+func buildAttachments(f *issueFields) []core.Attachment {
+	if len(f.Attachment) == 0 {
+		return nil
+	}
+	out := make([]core.Attachment, 0, len(f.Attachment))
+	for _, a := range f.Attachment {
+		if a.ID == "" || a.Content == "" {
+			continue
+		}
+		out = append(out, core.Attachment{
+			ID:         a.ID,
+			Filename:   a.Filename,
+			MIMEType:   a.MimeType,
+			ContentURL: a.Content,
+		})
+	}
+	return out
 }
 
 // linkSortOrder ranks relationship types so the detail pane shows the

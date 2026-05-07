@@ -79,6 +79,14 @@ func (m *DetailModel) rebuildContent() {
 		strings.Repeat(core.GlyphHorizLine, min(contentWidth, maxDividerWidth)),
 	)
 
+	// Pre-count navigable slots (children + related + attachments) so we
+	// generate exactly the right number of hint labels. Past the single-char
+	// alphabet they roll over to 2-char.
+	totalSlots := len(m.issue.Children) +
+		len(m.issue.Links) + len(siblingLinks(m.issue, m.registry)) +
+		len(m.issue.Attachments)
+	m.hintLabels = m.keys.Hints(totalSlots)
+
 	var buf strings.Builder
 	m.renderIdentityLine(&buf)
 	m.renderMetadataSection(&buf, contentWidth)
@@ -87,6 +95,7 @@ func (m *DetailModel) rebuildContent() {
 	m.renderRichTextBlocks(&buf, divider, wrapWidth)
 	m.renderChildrenTable(&buf, divider)
 	m.renderRelatedTable(&buf, divider)
+	m.renderAttachmentsTable(&buf, divider)
 	m.renderComments(&buf, divider, wrapWidth)
 	m.viewport.SetContent(buf.String())
 }
@@ -182,8 +191,8 @@ func (m *DetailModel) renderChildrenTable(buf *strings.Builder, divider string) 
 			childStatus = childStatus[:maxChildStatusWidth]
 		}
 		hint := ""
-		if idx < len(m.hintKeys) {
-			hint = fmt.Sprintf("[%c]", m.hintKeys[idx])
+		if idx < len(m.hintLabels) {
+			hint = fmt.Sprintf("[%s]", m.hintLabels[idx])
 		}
 		rows = append(rows, []string{
 			core.GlyphReturn,
@@ -272,7 +281,11 @@ func (m *DetailModel) renderRelatedTable(buf *strings.Builder, divider string) {
 	if rowWidth <= 0 {
 		rowWidth = m.width
 	}
-	maxRelatedSummaryWidth := rowWidth - relatedNonSummaryWidth
+	hintExtra := 0
+	if len(m.hintLabels) > 0 && len(m.hintLabels[0]) > 1 {
+		hintExtra = len(m.hintLabels[0]) - 1
+	}
+	maxRelatedSummaryWidth := rowWidth - relatedNonSummaryWidth - hintExtra
 	if maxRelatedSummaryWidth < 20 {
 		maxRelatedSummaryWidth = 20
 	}
@@ -284,8 +297,8 @@ func (m *DetailModel) renderRelatedTable(buf *strings.Builder, divider string) {
 		// registry, NavLinkIDForKey will surface the ID for a lazy fetch.
 		idx := hintBase + len(m.relatedHintIDs)
 		hint := ""
-		if idx < len(m.hintKeys) {
-			hint = fmt.Sprintf("[%c]", m.hintKeys[idx])
+		if idx < len(m.hintLabels) {
+			hint = fmt.Sprintf("[%s]", m.hintLabels[idx])
 		}
 		m.relatedTargets = append(m.relatedTargets, target)
 		m.relatedHintIDs = append(m.relatedHintIDs, l.Target)
@@ -388,6 +401,69 @@ func siblingLinks(issue *core.WorkItem, registry map[string]*core.WorkItem) []co
 		})
 	}
 	return out
+}
+
+// ── Attachments table ───────────────────────────────────────────────
+
+// renderAttachmentsTable lists the issue's attachments with hint keys.
+// Hints continue from where children + related left off so a single
+// keypress drills into any kind of neighbour. Pressing an attachment
+// hint shells out to the configured viewer (see AppModel.executeView).
+func (m *DetailModel) renderAttachmentsTable(buf *strings.Builder, divider string) {
+	m.attachmentTargets = nil
+	issue := m.issue
+	if issue == nil || len(issue.Attachments) == 0 {
+		return
+	}
+	styles := m.styles
+
+	buf.WriteString("\n" + divider + "\n")
+	buf.WriteString(styles.ChildSection.Render("ATTACHMENTS") + "\n")
+
+	hintBase := len(m.sortedChildren) + len(m.relatedHintIDs)
+	var rows [][]string
+	for _, a := range issue.Attachments {
+		idx := hintBase + len(m.attachmentTargets)
+		hint := ""
+		if idx < len(m.hintLabels) {
+			hint = fmt.Sprintf("[%s]", m.hintLabels[idx])
+		}
+		m.attachmentTargets = append(m.attachmentTargets, a)
+
+		mt := a.MIMEType
+		if mt == "" {
+			mt = "—"
+		}
+		rows = append(rows, []string{
+			core.GlyphReturn,
+			a.Filename,
+			mt,
+			hint,
+		})
+	}
+
+	attTable := table.New().
+		Border(lipgloss.HiddenBorder()).
+		BorderColumn(false).
+		BorderHeader(false).
+		StyleFunc(func(row, col int) lipgloss.Style {
+			padded := lipgloss.NewStyle().PaddingRight(1)
+			switch col {
+			case 0:
+				return styles.TreeGlyph.PaddingRight(1)
+			case 1:
+				return lipgloss.NewStyle().Bold(true).PaddingRight(1)
+			case 2:
+				return lipgloss.NewStyle().Faint(true).PaddingRight(1)
+			case 3:
+				return lipgloss.NewStyle().Faint(true).PaddingRight(1)
+			default:
+				return padded
+			}
+		}).
+		Rows(rows...)
+
+	buf.WriteString(attTable.Render() + "\n")
 }
 
 // ── Comments ────────────────────────────────────────────────────────

@@ -128,16 +128,32 @@ func hasClipboard() bool {
 var keys = terminal.DefaultKeyMap()
 var vimKeys = terminal.VimKeyMap()
 
-// childHintKey returns the KeyPressMsg that selects the n-th child
+// childHintKey returns the KeyPressMsg(s) that select the n-th child
 // (0-indexed) given a keymap's hint ordering. Tests use this instead of
-// hardcoding specific runes so they survive changes to HintKeys ordering.
-func childHintKey(km terminal.KeyMap, n int) tea.KeyPressMsg {
-	hints := km.HintKeys()
+// hardcoding runes so they survive changes to alphabet ordering. The
+// caller must Send each returned message in order — for 2-char hints
+// that means two presses to drive the navigation.
+func childHintKeys(km terminal.KeyMap, total, n int) []tea.KeyPressMsg {
+	hints := km.Hints(total)
 	if n < 0 || n >= len(hints) {
-		panic("childHintKey: index out of range")
+		panic("childHintKeys: index out of range")
 	}
-	r := hints[n]
-	return tea.KeyPressMsg{Code: r, Text: string(r)}
+	out := make([]tea.KeyPressMsg, 0, len(hints[n]))
+	for _, r := range hints[n] {
+		out = append(out, tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
+	return out
+}
+
+// childHintKey is the single-press shortcut used by tests where the
+// total slot count fits inside the single-char alphabet (every hint is
+// exactly one rune). For overflow scenarios use childHintKeys.
+func childHintKey(km terminal.KeyMap, n int) tea.KeyPressMsg {
+	msgs := childHintKeys(km, n+1, n)
+	if len(msgs) != 1 {
+		panic("childHintKey: hint is multi-char; use childHintKeys")
+	}
+	return msgs[0]
 }
 
 // buildJourneyModel creates a fully wired model for teatest journey tests.

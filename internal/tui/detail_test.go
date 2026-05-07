@@ -428,6 +428,43 @@ func TestDetailView_VimModeExcludesBoundLetters(t *testing.T) {
 	}
 }
 
+func TestDetailView_ManyChildrenRollsOverToTwoCharHints(t *testing.T) {
+	// Past the single-char alphabet (~36 hints in default mode), every
+	// hint becomes a 2-char letter pair. Verify that the rendered view
+	// matches what NavTargetForKey accepts.
+	keys := terminal.DefaultKeyMap()
+	overflow := len(keys.HintKeys()) + 5
+	parent, registry := makeParentWithChildren(overflow)
+
+	theme := terminal.DefaultTheme()
+	styles := terminal.NewStyles(theme, nil, "")
+	dm := tui.NewDetailModel(styles, registry, testWS("proj"), keys)
+	dm.SetSize(160, 200)
+	dm.SetIssue(parent)
+	view := stripANSI(dm.View())
+
+	hints := keys.Hints(overflow)
+	if len(hints) == 0 || len(hints[0]) != 2 {
+		t.Fatalf("expected 2-char hints for %d slots; got first=%q", overflow, hints[0])
+	}
+	if !strings.Contains(view, "["+hints[0]+"]") {
+		t.Errorf("first 2-char hint %q missing from rendered view", hints[0])
+	}
+	if !strings.Contains(view, "["+hints[overflow-1]+"]") {
+		t.Errorf("last 2-char hint %q missing from rendered view", hints[overflow-1])
+	}
+	// First child resolves through the 2-char hint label.
+	if got := dm.NavTargetForKey(hints[0]); got == nil || got.ID != pidChild(0) {
+		t.Errorf("NavTargetForKey(%q): want %s, got %v", hints[0], pidChild(0), got)
+	}
+	if dm.HintLabelLength() != 2 {
+		t.Errorf("HintLabelLength = %d; want 2", dm.HintLabelLength())
+	}
+	if !dm.IsHintPrefix(string(hints[0][0])) {
+		t.Errorf("IsHintPrefix(%q) = false; want true", string(hints[0][0]))
+	}
+}
+
 func TestDetailView_NoDescriptionDoesNotRenderSection(t *testing.T) {
 	// When an issue has no description, the DESCRIPTION section header
 	// should not appear — the block is skipped entirely rather than left
@@ -808,19 +845,19 @@ func TestDetailRelatedNavigation(t *testing.T) {
 	}
 
 	// "is blocked by" (order 1) outranks "blocks" (order 2): first hint key
-	// (no children → starts at hintKeys[0]) goes to PROJ-12.
-	hint := keys.HintKeys()[0]
-	target := dm.NavTargetForKey(hint)
+	// (no children → starts at hints[0]) goes to PROJ-12.
+	hints := keys.Hints(3)
+	target := dm.NavTargetForKey(hints[0])
 	if target == nil || target.ID != "PROJ-12" {
 		gotID := ""
 		if target != nil {
 			gotID = target.ID
 		}
-		t.Errorf("first hint = %q; want PROJ-12, got %q", string(hint), gotID)
+		t.Errorf("first hint = %q; want PROJ-12, got %q", hints[0], gotID)
 	}
 
 	// Second hint should jump to PROJ-11 (next in-registry link).
-	target2 := dm.NavTargetForKey(keys.HintKeys()[1])
+	target2 := dm.NavTargetForKey(hints[1])
 	if target2 == nil || target2.ID != "PROJ-11" {
 		gotID := ""
 		if target2 != nil {
@@ -832,16 +869,15 @@ func TestDetailRelatedNavigation(t *testing.T) {
 	// Non-registry link consumes a hint but resolves through the lazy-
 	// fetch path: NavTargetForKey returns nil, NavLinkIDForKey returns
 	// the target ID so the caller can issue a Provider.Get.
-	thirdHint := keys.HintKeys()[2]
-	if got := dm.NavTargetForKey(thirdHint); got != nil {
+	if got := dm.NavTargetForKey(hints[2]); got != nil {
 		t.Errorf("non-registry hint should return nil from NavTargetForKey; got %q", got.ID)
 	}
-	if id := dm.NavLinkIDForKey(thirdHint); id != "PROJ-99" {
+	if id := dm.NavLinkIDForKey(hints[2]); id != "PROJ-99" {
 		t.Errorf("NavLinkIDForKey for non-registry hint = %q; want PROJ-99", id)
 	}
 
 	// Sanity: child-position hints don't have link IDs.
-	if id := dm.NavLinkIDForKey('!'); id != "" {
+	if id := dm.NavLinkIDForKey("!"); id != "" {
 		t.Errorf("unbound hint should yield empty link ID; got %q", id)
 	}
 }
@@ -876,7 +912,7 @@ func TestDetailSiblingNavigation(t *testing.T) {
 		t.Errorf("STORY-2 should not be its own sibling\n%s", view)
 	}
 
-	hints := keys.HintKeys()
+	hints := keys.Hints(2)
 	first := dm.NavTargetForKey(hints[0])
 	second := dm.NavTargetForKey(hints[1])
 	if first == nil || second == nil {
@@ -913,9 +949,9 @@ func TestDetailNavTargetForKey_ChildrenBeforeRelated(t *testing.T) {
 	// When the issue has both children and links, hint keys are assigned to
 	// children first, then to the in-registry related items.
 	registry := map[string]*core.WorkItem{
-		"P-1":  {ID: "P-1", Summary: "Parent", Type: "Epic", Status: "Open", Links: []core.Link{{RelType: "blocks", Target: "P-9"}}},
-		"C-1":  {ID: "C-1", Summary: "Child A", Type: "Story", Status: "To Do", ParentID: "P-1"},
-		"P-9":  {ID: "P-9", Summary: "Linked", Type: "Task", Status: "Done"},
+		"P-1": {ID: "P-1", Summary: "Parent", Type: "Epic", Status: "Open", Links: []core.Link{{RelType: "blocks", Target: "P-9"}}},
+		"C-1": {ID: "C-1", Summary: "Child A", Type: "Story", Status: "To Do", ParentID: "P-1"},
+		"P-9": {ID: "P-9", Summary: "Linked", Type: "Task", Status: "Done"},
 	}
 	core.LinkChildren(registry)
 
@@ -927,7 +963,7 @@ func TestDetailNavTargetForKey_ChildrenBeforeRelated(t *testing.T) {
 	dm.SetIssue(registry["P-1"])
 	_ = dm.View() // populate sortedChildren / relatedTargets
 
-	hints := keys.HintKeys()
+	hints := keys.Hints(2)
 	if got := dm.NavTargetForKey(hints[0]); got == nil || got.ID != "C-1" {
 		t.Errorf("first hint: want C-1, got %v", got)
 	}

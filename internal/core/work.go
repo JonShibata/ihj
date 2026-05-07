@@ -66,6 +66,11 @@ type WorkItem struct {
 	// from issuelinks-style API data; the TUI renders them in a "Related"
 	// section with hint-key navigation.
 	Links []Link `json:"links,omitempty" yaml:"-"`
+
+	// Attachments is the list of files uploaded to the issue. The TUI
+	// renders them as a hint-key-navigable section and shells out to a
+	// viewer when the user presses a hint.
+	Attachments []Attachment `json:"attachments,omitempty" yaml:"-"`
 }
 
 // Link describes one non-hierarchical relationship from this work item to
@@ -80,6 +85,16 @@ type Link struct {
 	TargetSummary string `json:"targetSummary,omitempty"`
 	TargetType    string `json:"targetType,omitempty"`
 	TargetStatus  string `json:"targetStatus,omitempty"`
+}
+
+// Attachment describes a file uploaded to a work item. ContentURL is the
+// authenticated download URL — fetching it requires the workspace's
+// credentials; the provider's AttachmentDownloader handles that.
+type Attachment struct {
+	ID         string `json:"id"`
+	Filename   string `json:"filename"`
+	MIMEType   string `json:"mimeType,omitempty"`
+	ContentURL string `json:"contentUrl,omitempty"`
 }
 
 // Field accessors for common Fields entries.

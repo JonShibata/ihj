@@ -50,18 +50,19 @@ type rawServer struct {
 }
 
 type rawWorkspace struct {
-	Server          string                         `yaml:"server"` // Server alias (references servers map)
-	Name            string                         `yaml:"name"`
-	CacheTTL        string                         `yaml:"cache_ttl"`
-	Guidance        string                         `yaml:"guidance"` // Removed — detected and rejected with a migration hint.
-	Extract         rawExtractConfig               `yaml:"extract"`
-	Fields          map[string]any                 `yaml:"fields,omitempty"` // Workspace-wide field aliases (alias → provider field ID).
-	Types           []rawTypeConfig                `yaml:"types"`
-	Statuses        []rawStatusConfig              `yaml:"statuses"`
-	Priorities      []rawPriorityConfig            `yaml:"priorities,omitempty"` // Optional sort order; defaults to standard Jira order.
-	Filters         map[string]string              `yaml:"filters"`
-	TransitionHooks map[string][]rawTransitionHook `yaml:"transition_hooks,omitempty"`
-	ViewCommand     string                         `yaml:"view_command,omitempty"`
+	Server                string                         `yaml:"server"` // Server alias (references servers map)
+	Name                  string                         `yaml:"name"`
+	CacheTTL              string                         `yaml:"cache_ttl"`
+	Guidance              string                         `yaml:"guidance"` // Removed — detected and rejected with a migration hint.
+	Extract               rawExtractConfig               `yaml:"extract"`
+	Fields                map[string]any                 `yaml:"fields,omitempty"` // Workspace-wide field aliases (alias → provider field ID).
+	Types                 []rawTypeConfig                `yaml:"types"`
+	Statuses              []rawStatusConfig              `yaml:"statuses"`
+	Priorities            []rawPriorityConfig            `yaml:"priorities,omitempty"` // Optional sort order; defaults to standard Jira order.
+	Filters               map[string]string              `yaml:"filters"`
+	TransitionHooks       map[string][]rawTransitionHook `yaml:"transition_hooks,omitempty"`
+	ViewCommand           string                         `yaml:"view_command,omitempty"`
+	AttachmentViewCommand string                         `yaml:"attachment_view_command,omitempty"`
 }
 
 type rawTransitionHook struct {
@@ -173,8 +174,9 @@ func loadConfig(path string) (configResult, error) {
 	universalKeys := map[string]bool{
 		"server": true, "name": true, "types": true, "statuses": true, "filters": true,
 		"cache_ttl": true, "guidance": true, "extract": true, "fields": true,
-		"transition_hooks": true,
-		"view_command":     true,
+		"transition_hooks":        true,
+		"view_command":            true,
+		"attachment_view_command": true,
 	}
 
 	// Parse global cache TTL (falls back to core.DefaultCacheTTL).
@@ -293,24 +295,25 @@ func loadConfig(path string) (configResult, error) {
 		}
 
 		workspaces[slug] = &core.Workspace{
-			Slug:             slug,
-			Name:             rws.Name,
-			Provider:         srv.Provider,
-			ServerAlias:      rws.Server,
-			BaseURL:          srv.URL,
-			CacheTTL:         cacheTTL,
-			ExtractGuidance:  extractGuidance,
-			Types:            types,
-			Statuses:         statuses,
-			Priorities:       priorities,
-			Filters:          rws.Filters,
-			ViewCommand:      rws.ViewCommand,
-			FieldAliases:     parseIntMap(rws.Fields),
-			TransitionHooks:  hooks,
-			StatusOrderMap:   statusOrderMap,
-			TypeOrderMap:     typeOrderMap,
-			PriorityOrderMap: priorityOrderMap,
-			ProviderConfig:   providerCfg,
+			Slug:                  slug,
+			Name:                  rws.Name,
+			Provider:              srv.Provider,
+			ServerAlias:           rws.Server,
+			BaseURL:               srv.URL,
+			CacheTTL:              cacheTTL,
+			ExtractGuidance:       extractGuidance,
+			Types:                 types,
+			Statuses:              statuses,
+			Priorities:            priorities,
+			Filters:               rws.Filters,
+			ViewCommand:           rws.ViewCommand,
+			AttachmentViewCommand: rws.AttachmentViewCommand,
+			FieldAliases:          parseIntMap(rws.Fields),
+			TransitionHooks:       hooks,
+			StatusOrderMap:        statusOrderMap,
+			TypeOrderMap:          typeOrderMap,
+			PriorityOrderMap:      priorityOrderMap,
+			ProviderConfig:        providerCfg,
 		}
 	}
 

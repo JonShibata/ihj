@@ -37,3 +37,19 @@ func TestBuildViewProcess_NoSubstitution(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildViewProcess_SubstitutesPath(t *testing.T) {
+	cmd, err := buildViewProcess("kitten icat --hold {path}", "/tmp/foo.png")
+	if err != nil {
+		t.Fatalf("err = %v", err)
+	}
+	want := []string{"kitten", "icat", "--hold", "/tmp/foo.png"}
+	if len(cmd.Args) != len(want) {
+		t.Fatalf("Args = %v; want %v", cmd.Args, want)
+	}
+	for i, a := range want {
+		if cmd.Args[i] != a {
+			t.Errorf("Args[%d] = %q; want %q", i, cmd.Args[i], a)
+		}
+	}
+}

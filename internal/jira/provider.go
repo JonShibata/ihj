@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"os"
 	"strings"
 
 	"golang.org/x/text/cases"
@@ -209,6 +210,48 @@ func (p *Provider) Update(ctx context.Context, id string, changes *core.Changes)
 	}
 
 	return nil
+}
+
+// DownloadAttachment implements core.AttachmentDownloader. Fetches the
+// authenticated content URL into a tempfile preserving the suggested
+// filename's extension so external viewers can dispatch by suffix.
+// Caller owns the returned path and must remove it when done.
+func (p *Provider) DownloadAttachment(ctx context.Context, url, suggestedName string) (string, error) {
+	if url == "" {
+		return "", fmt.Errorf("empty attachment URL")
+	}
+	pattern := "ihj-attachment-*"
+	if ext := pathExt(suggestedName); ext != "" {
+		pattern = "ihj-attachment-*" + ext
+	}
+	f, err := os.CreateTemp("", pattern)
+	if err != nil {
+		return "", fmt.Errorf("creating tempfile: %w", err)
+	}
+	if err := p.client.DownloadTo(ctx, url, f); err != nil {
+		_ = f.Close()
+		_ = os.Remove(f.Name())
+		return "", err
+	}
+	if err := f.Close(); err != nil {
+		_ = os.Remove(f.Name())
+		return "", err
+	}
+	return f.Name(), nil
+}
+
+// pathExt returns the lowercase extension of a filename including the
+// leading dot, or empty string if there is none.
+func pathExt(name string) string {
+	for i := len(name) - 1; i >= 0; i-- {
+		switch name[i] {
+		case '.':
+			return strings.ToLower(name[i:])
+		case '/', '\\':
+			return ""
+		}
+	}
+	return ""
 }
 
 // Children implements core.ChildrenLister. Runs JQL `parent = <key>`

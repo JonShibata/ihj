@@ -85,6 +85,14 @@ type siblingsFetchedMsg struct {
 	err      error
 }
 
+// attachmentReadyMsg fires once an attachment download completes; the
+// detail pane handler then suspends the TUI and runs the viewer.
+type attachmentReadyMsg struct {
+	path        string // local tempfile path (caller removes when done)
+	viewCommand string // template with {path}
+	filename    string // for the post-view notify
+}
+
 // workspaceSwitchedMsg carries the result of a workspace switch request.
 type workspaceSwitchedMsg struct {
 	slug      string

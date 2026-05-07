@@ -36,8 +36,13 @@ type DetailModel struct {
 	// relatedTargets[i] would be if it were registry-resident). Used by
 	// NavLinkIDForKey for lazy fetches of off-filter neighbours.
 	relatedHintIDs []string
-	// Available single-key hints for child navigation (computed from keymap).
-	hintKeys []rune
+	// Attachments rendered in the ATTACHMENTS section. Hint keys for
+	// these begin AFTER children + related (single shared keymap pool).
+	attachmentTargets []core.Attachment
+	// Available hint labels for navigation, regenerated each rebuildContent
+	// based on the total slot count (children + related + attachments).
+	// All labels share the same length — see KeyMap.Hints.
+	hintLabels []string
 }
 
 // NewDetailModel creates the detail pane.
@@ -48,7 +53,6 @@ func NewDetailModel(styles *terminal.Styles, registry map[string]*core.WorkItem,
 		keys:     keys,
 		registry: registry,
 		ws:       ws,
-		hintKeys: keys.HintKeys(),
 	}
 }
 
@@ -145,26 +149,49 @@ func (m *DetailModel) ClearHistory() {
 	m.history = nil
 }
 
-// ChildIndexForKey returns the child index for a hint key press, or -1 if not valid.
-func (m *DetailModel) ChildIndexForKey(r rune) int {
-	for i, hint := range m.hintKeys {
+// HintLabelLength returns the width of every hint label currently in use
+// (1 for single-char hints, 2 once the slot count overflows the alphabet,
+// 0 when no hints are active). Callers use this to decide how many
+// keystrokes to accumulate before resolving.
+func (m *DetailModel) HintLabelLength() int {
+	if len(m.hintLabels) == 0 {
+		return 0
+	}
+	return len(m.hintLabels[0])
+}
+
+// IsHintPrefix reports whether s is a strict prefix of any hint label.
+// Used by the key handler to decide whether to consume a partial keystroke
+// while waiting for the second char of a 2-char hint.
+func (m *DetailModel) IsHintPrefix(s string) bool {
+	for _, label := range m.hintLabels {
+		if len(label) > len(s) && strings.HasPrefix(label, s) {
+			return true
+		}
+	}
+	return false
+}
+
+// ChildIndexForKey returns the child index for a hint label, or -1 if not valid.
+func (m *DetailModel) ChildIndexForKey(s string) int {
+	for i, hint := range m.hintLabels {
 		if i >= len(m.sortedChildren) {
 			break
 		}
-		if hint == r {
+		if hint == s {
 			return i
 		}
 	}
 	return -1
 }
 
-// NavTargetForKey resolves a hint key against the unified children + related
+// NavTargetForKey resolves a hint label against the unified children + related
 // pool, returning the target WorkItem if it's in the current registry.
 // Returns nil for related rows whose target isn't loaded — use
 // NavLinkIDForKey in that case to drive a lazy fetch.
-func (m *DetailModel) NavTargetForKey(r rune) *core.WorkItem {
-	for i, hint := range m.hintKeys {
-		if hint != r {
+func (m *DetailModel) NavTargetForKey(s string) *core.WorkItem {
+	for i, hint := range m.hintLabels {
+		if hint != s {
 			continue
 		}
 		if i < len(m.sortedChildren) {
@@ -180,12 +207,12 @@ func (m *DetailModel) NavTargetForKey(r rune) *core.WorkItem {
 }
 
 // NavLinkIDForKey returns the related-link target ID associated with a
-// hint key, regardless of whether the target is in the registry. Empty
+// hint label, regardless of whether the target is in the registry. Empty
 // string means the hint maps to a child (not a link) or to nothing at
 // all — caller should treat that as "not handled".
-func (m *DetailModel) NavLinkIDForKey(r rune) string {
-	for i, hint := range m.hintKeys {
-		if hint != r {
+func (m *DetailModel) NavLinkIDForKey(s string) string {
+	for i, hint := range m.hintLabels {
+		if hint != s {
 			continue
 		}
 		if i < len(m.sortedChildren) {
@@ -198,6 +225,27 @@ func (m *DetailModel) NavLinkIDForKey(r rune) string {
 		return ""
 	}
 	return ""
+}
+
+// NavAttachmentForKey returns the attachment associated with a hint label,
+// or nil. Hints for attachments come AFTER children + related, so callers
+// should try the child/link resolvers first.
+func (m *DetailModel) NavAttachmentForKey(s string) *core.Attachment {
+	for i, hint := range m.hintLabels {
+		if hint != s {
+			continue
+		}
+		base := len(m.sortedChildren) + len(m.relatedHintIDs)
+		if i < base {
+			return nil
+		}
+		j := i - base
+		if j < len(m.attachmentTargets) {
+			return &m.attachmentTargets[j]
+		}
+		return nil
+	}
+	return nil
 }
 
 // Breadcrumb returns a display string showing the navigation path.

@@ -48,6 +48,12 @@ type Workspace struct {
 	// runs. {key} is substituted with the issue ID.
 	ViewCommand string `json:"viewCommand,omitempty"`
 
+	// AttachmentViewCommand runs when the user presses an attachment
+	// hint in the detail pane. {path} is substituted with a temp file
+	// holding the downloaded attachment. Defaults to
+	// `kitten icat --hold {path}` when unset, which works on kitty.
+	AttachmentViewCommand string `json:"attachmentViewCommand,omitempty"`
+
 	// CacheTTL is the duration for which cached data is considered fresh.
 	// Resolved at config load: workspace cache_ttl > global cache_ttl > DefaultCacheTTL.
 	CacheTTL time.Duration `json:"-"`
@@ -173,12 +179,12 @@ func (ws *Workspace) AllFieldDefs() FieldDefs {
 // to a specific status. Type controls the input widget; When is an optional
 // "field == value" predicate that must hold for the hook to fire.
 type TransitionHook struct {
-	Field    string `json:"field"`              // alias key; maps via Provider field translation on write
-	Prompt   string `json:"prompt"`             // prompt text shown to the user
-	Type     string `json:"type"`               // text | csv | sprint | select
-	Required bool   `json:"required,omitempty"` // empty input cancels the transition
-	When     string `json:"when,omitempty"`     // "field == value", e.g. "issuetype == Bug"
-	Values   []string `json:"values,omitempty"` // only for type=select
+	Field    string   `json:"field"`              // alias key; maps via Provider field translation on write
+	Prompt   string   `json:"prompt"`             // prompt text shown to the user
+	Type     string   `json:"type"`               // text | csv | sprint | select
+	Required bool     `json:"required,omitempty"` // empty input cancels the transition
+	When     string   `json:"when,omitempty"`     // "field == value", e.g. "issuetype == Bug"
+	Values   []string `json:"values,omitempty"`   // only for type=select
 }
 
 // Comment represents a comment on a work item.

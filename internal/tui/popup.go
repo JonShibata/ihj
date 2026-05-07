@@ -67,6 +67,11 @@ type PopupModel struct {
 
 	input textarea.Model // For PopupInput.
 
+	// pendingHint accumulates the first character of a multi-char hint
+	// label while waiting for the second keypress. Reset whenever the
+	// popup processes any non-hint key.
+	pendingHint string
+
 	width, height int // Available terminal dimensions.
 	styles        *terminal.Styles
 	keys          terminal.KeyMap
@@ -100,6 +105,7 @@ func (p *PopupModel) ShowSelect(id, title string, options []string) {
 	p.values = nil
 	p.activeIndex = noActiveItem
 	p.cursor = 0
+	p.pendingHint = ""
 }
 
 // ShowSelectWithActive opens a selection popup where one option is marked
@@ -116,6 +122,7 @@ func (p *PopupModel) ShowSelectWithActive(id, title string, labels []string, val
 	p.values = values
 	p.activeIndex = activeIndex
 	p.cursor = 0
+	p.pendingHint = ""
 }
 
 // ShowInput opens a text input popup.
@@ -161,16 +168,20 @@ func (p *PopupModel) updateSelect(msg tea.KeyPressMsg) (tea.Cmd, *PopupResult) {
 
 	switch {
 	case key.Matches(msg, keys.Up):
+		p.pendingHint = ""
 		if p.cursor > 0 {
 			p.cursor--
 		}
 	case key.Matches(msg, keys.Down):
+		p.pendingHint = ""
 		if p.cursor < len(p.labels)-1 {
 			p.cursor++
 		}
 	case key.Matches(msg, keys.Home):
+		p.pendingHint = ""
 		p.cursor = 0
 	case key.Matches(msg, keys.End):
+		p.pendingHint = ""
 		p.cursor = len(p.labels) - 1
 	case key.Matches(msg, keys.Submit), key.Matches(msg, keys.Focus):
 		result := &PopupResult{ID: p.id, Index: p.cursor, Value: p.selectedValue(p.cursor)}
@@ -186,20 +197,44 @@ func (p *PopupModel) updateSelect(msg tea.KeyPressMsg) (tea.Cmd, *PopupResult) {
 	return nil, nil
 }
 
-// tryHintKeySelect checks whether the key press matches a hint shortcut
-// (1-9, 0, a-z) and returns the corresponding selection result.
+// tryHintKeySelect resolves a hint label against the popup's option list.
+// Hints are 1-char until the option count overflows the alphabet, then 2-char
+// (see KeyMap.Hints); the second char is consumed via pendingHint.
 func (p *PopupModel) tryHintKeySelect(msg tea.KeyPressMsg) (tea.Cmd, *PopupResult) {
+	pending := p.pendingHint
+	p.pendingHint = ""
+
 	pressed := msg.String()
 	if len([]rune(pressed)) != 1 {
 		return nil, nil
 	}
-	idx := p.hintIndex([]rune(pressed)[0])
-	if idx < 0 || idx >= len(p.labels) {
+
+	hints := p.keys.Hints(len(p.labels))
+	if len(hints) == 0 {
 		return nil, nil
 	}
-	result := &PopupResult{ID: p.id, Index: idx, Value: p.selectedValue(idx)}
-	p.Close()
-	return nil, result
+	hl := len(hints[0])
+	candidate := pending + pressed
+
+	if len(candidate) < hl {
+		// Not yet a complete hint — only consume if the prefix is plausible.
+		for _, h := range hints {
+			if len(h) > len(candidate) && strings.HasPrefix(h, candidate) {
+				p.pendingHint = candidate
+				return nil, nil
+			}
+		}
+		return nil, nil
+	}
+
+	for idx, h := range hints {
+		if h == candidate {
+			result := &PopupResult{ID: p.id, Index: idx, Value: p.selectedValue(idx)}
+			p.Close()
+			return nil, result
+		}
+	}
+	return nil, nil
 }
 
 // selectedValue returns the underlying value for the given index.
@@ -209,17 +244,6 @@ func (p *PopupModel) selectedValue(idx int) string {
 		return p.values[idx]
 	}
 	return p.labels[idx]
-}
-
-// hintIndex returns the option index that would be selected by pressing
-// the given rune, or -1 when the rune isn't a hint key.
-func (p *PopupModel) hintIndex(r rune) int {
-	for idx, hint := range p.keys.HintKeys() {
-		if hint == r {
-			return idx
-		}
-	}
-	return -1
 }
 
 func (p *PopupModel) updateInput(msg tea.KeyPressMsg) (tea.Cmd, *PopupResult) {
@@ -298,7 +322,12 @@ func (p *PopupModel) renderSelect() string {
 
 	activeStyle := lipgloss.NewStyle().Foreground(theme.Muted)
 
-	hints := p.keys.HintKeys()
+	hints := p.keys.Hints(len(p.labels))
+	hintW := 0
+	if len(hints) > 0 {
+		hintW = len(hints[0])
+	}
+	pad := strings.Repeat(" ", hintW)
 	for idx := start; idx < end; idx++ {
 		option := p.labels[idx]
 		isActive := idx == p.activeIndex
@@ -318,11 +347,11 @@ func (p *PopupModel) renderSelect() string {
 			}
 		}
 
-		shortcut := dimStyle.Render("  ")
+		shortcut := dimStyle.Render(pad)
 		if idx < len(hints) {
-			shortcut = dimStyle.Render(string(hints[idx])) + " "
+			shortcut = dimStyle.Render(hints[idx])
 		}
-		buf.WriteString(prefix + shortcut + style.Render(option) + "\n")
+		buf.WriteString(prefix + shortcut + " " + style.Render(option) + "\n")
 	}
 
 	if end < len(p.labels) {

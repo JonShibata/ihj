@@ -233,6 +233,39 @@ func TestPopupSelect_HintKeyQuickSelect(t *testing.T) {
 	}
 }
 
+func TestPopupSelect_TwoCharHintRequiresTwoPresses(t *testing.T) {
+	// When the option count exceeds the single-char alphabet, every hint
+	// becomes a two-char label. The first press should be consumed silently
+	// (no result) and the second should resolve.
+	keys := terminal.DefaultKeyMap()
+	overflow := len(keys.HintKeys()) + 3
+	items := make([]string, overflow)
+	for i := range items {
+		items[i] = fmt.Sprintf("Item%d", i+1)
+	}
+	popup := newBlackboxTestPopup()
+	popup.ShowSelect("transition", "Pick", items)
+
+	hints := keys.Hints(overflow)
+	if len(hints) == 0 || len(hints[0]) != 2 {
+		t.Fatalf("expected 2-char hints; got first=%q", hints[0])
+	}
+	target := overflow - 1
+	hint := hints[target]
+
+	_, result := popup.Update(bbNumKey(rune(hint[0])))
+	if result != nil {
+		t.Fatalf("first press of %q should not resolve; got %+v", hint, result)
+	}
+	_, result = popup.Update(bbNumKey(rune(hint[1])))
+	if result == nil {
+		t.Fatalf("second press of %q returned nil; want index %d", hint, target)
+	}
+	if result.Index != target {
+		t.Errorf("Index = %d; want %d", result.Index, target)
+	}
+}
+
 func TestPopupSelect_HintKeysDisplayedInView(t *testing.T) {
 	items := make([]string, 12)
 	for i := range items {

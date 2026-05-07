@@ -5,13 +5,21 @@ import (
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/mikecsmith/ihj/internal/core"
 )
 
 // ── Top-level key handler ───────────────────────────────────────
 
 func (m AppModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	// Capture-and-clear: pendingHint only survives across exactly one
+	// subsequent keypress. tryChildNavigation reads it from the local copy
+	// below and re-sets m.pendingHint when accumulating further.
+	pending := m.pendingHint
+	m.pendingHint = ""
+
 	if m.vimMode {
-		return m.handleKeyVim(msg)
+		return m.handleKeyVim(msg, pending)
 	}
 
 	keys := m.keys
@@ -59,7 +67,7 @@ func (m AppModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	// ── Navigation and child hint keys ──
 
-	if handled, cmd := m.handleNavigation(msg); handled {
+	if handled, cmd := m.handleNavigation(msg, pending); handled {
 		return m, cmd
 	}
 
@@ -101,17 +109,18 @@ func (m AppModel) handleBackspace() (tea.Model, tea.Cmd) {
 // ── Navigation ──────────────────────────────────────────────────
 
 // handleNavigation processes cursor movement and child hint keys.
+// pending is the previously-accumulated hint prefix (empty when none).
 // Returns (handled, cmd) — cmd is non-nil when a related-issue hint
 // kicks off a lazy fetch or when changing the list selection triggers
 // a siblings fetch for the new issue's parent.
-func (m *AppModel) handleNavigation(msg tea.KeyPressMsg) (bool, tea.Cmd) {
+func (m *AppModel) handleNavigation(msg tea.KeyPressMsg, pending string) (bool, tea.Cmd) {
 	if m.view >= ViewDetail {
-		return m.handleDetailNavigation(msg)
+		return m.handleDetailNavigation(msg, pending)
 	}
 	return m.handleListNavigation(msg)
 }
 
-func (m *AppModel) handleDetailNavigation(msg tea.KeyPressMsg) (bool, tea.Cmd) {
+func (m *AppModel) handleDetailNavigation(msg tea.KeyPressMsg, pending string) (bool, tea.Cmd) {
 	keys := m.keys
 
 	switch {
@@ -136,18 +145,35 @@ func (m *AppModel) handleDetailNavigation(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 	}
 
 	// Hint keys navigate to child issues.
-	return m.tryChildNavigation(msg)
+	return m.tryChildNavigation(msg, pending)
 }
 
-func (m *AppModel) tryChildNavigation(msg tea.KeyPressMsg) (bool, tea.Cmd) {
+func (m *AppModel) tryChildNavigation(msg tea.KeyPressMsg, pending string) (bool, tea.Cmd) {
+	hl := m.detail.HintLabelLength()
+	if hl == 0 {
+		return false, nil
+	}
+
 	pressed := msg.String()
 	if len([]rune(pressed)) != 1 {
 		return false, nil
 	}
-	r := []rune(pressed)[0]
 
-	// Fast path: target is in the current registry — navigate immediately.
-	if target := m.detail.NavTargetForKey(r); target != nil {
+	candidate := pending + pressed
+
+	// Need more chars before this is a complete hint. Consume only when the
+	// candidate is actually a prefix of some hint, otherwise let the press
+	// fall through to search input or whatever else.
+	if len(candidate) < hl {
+		if !m.detail.IsHintPrefix(candidate) {
+			return false, nil
+		}
+		m.pendingHint = candidate
+		return true, nil
+	}
+
+	// Candidate is now full-length. Resolve against children → attachments → lazy related.
+	if target := m.detail.NavTargetForKey(candidate); target != nil {
 		m.detail.NavigateTo(target)
 		m.recalcLayout()
 		if issue := m.detail.Issue(); issue != nil {
@@ -156,15 +182,43 @@ func (m *AppModel) tryChildNavigation(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		return true, m.maybeFetchSiblings()
 	}
 
-	// Lazy path: hint maps to a related issue that's outside the current
-	// filter view. Kick off a Provider.Get and let the message handler
-	// navigate when the item arrives.
-	id := m.detail.NavLinkIDForKey(r)
+	if att := m.detail.NavAttachmentForKey(candidate); att != nil {
+		return true, m.viewAttachment(*att)
+	}
+
+	id := m.detail.NavLinkIDForKey(candidate)
 	if id == "" {
 		return false, nil
 	}
 	m.setNotify("Loading " + id + "…")
 	return true, m.fetchRelated(id)
+}
+
+// viewAttachment downloads the attachment via the provider, then shells
+// out to the configured attachment_view_command (default kitten icat
+// --hold) which holds until the user presses any key. Tempfile is
+// removed on completion.
+func (m AppModel) viewAttachment(a core.Attachment) tea.Cmd {
+	dl, ok := m.wsSess.Provider.(core.AttachmentDownloader)
+	if !ok {
+		m.setNotify("Provider does not support attachment downloads")
+		return nil
+	}
+	tmpl := m.ws.AttachmentViewCommand
+	if tmpl == "" {
+		tmpl = "kitten icat --hold {path}"
+	}
+	url := a.ContentURL
+	suggested := a.Filename
+	ctx := m.ctx
+	m.setNotify("Loading " + a.Filename + "…")
+	return func() tea.Msg {
+		path, err := dl.DownloadAttachment(ctx, url, suggested)
+		if err != nil {
+			return notifyMsg{title: "Attachment failed", message: err.Error()}
+		}
+		return attachmentReadyMsg{path: path, viewCommand: tmpl, filename: suggested}
+	}
 }
 
 // fetchRelated returns a tea.Cmd that fetches the named issue via the
