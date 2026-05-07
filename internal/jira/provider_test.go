@@ -1422,6 +1422,72 @@ func TestProvider_Update_PriorityByID(t *testing.T) {
 	}
 }
 
+// devFixReleaseMetaField models a custom labels-array field of the kind
+// jilm writes via raw curl (jira_set_labels_field). Its plugin type maps
+// to FieldStringArray so the value should land as a JSON array on the wire.
+const devFixReleaseMetaField = `{
+	"fieldId": "customfield_12901",
+	"key": "customfield_12901",
+	"name": "Dev Fix Release",
+	"required": false,
+	"schema": {"type": "array", "items": "string", "custom": "com.atlassian.jira.plugin.system.customfieldtypes:labels", "customId": 12901}
+}`
+
+func TestProvider_Update_LabelsArrayCustomField(t *testing.T) {
+	var receivedPayload map[string]any
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.Contains(r.URL.Path, "createmeta"):
+			w.Header().Set("Content-Type", "application/json")
+			w.Write(createMetaFieldsJSON(devFixReleaseMetaField))
+		case r.URL.Path == "/rest/api/3/issue/FOO-1" && r.Method == "PUT":
+			json.NewDecoder(r.Body).Decode(&receivedPayload)
+			w.WriteHeader(204)
+		default:
+			w.WriteHeader(404)
+		}
+	})
+
+	srv := httptest.NewServer(handler)
+	t.Cleanup(srv.Close)
+
+	ws := testWorkspace(srv.URL)
+	ws.ServerAlias = "test-srv"
+	jira.HydrateWorkspace(ws)
+
+	client := jira.New(srv.URL, "test-token")
+	provider, err := jira.NewProvider(client, ws, t.TempDir())
+	if err != nil {
+		t.Fatalf("NewProvider: %v", err)
+	}
+
+	err = provider.Update(context.Background(), "FOO-1", &core.Changes{
+		Fields: map[string]any{"dev_fix_release": []string{"26.4", "master"}},
+	})
+	if err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+
+	fields, ok := receivedPayload["fields"].(map[string]any)
+	if !ok {
+		t.Fatal("fields missing from payload")
+	}
+	got, ok := fields["customfield_12901"].([]any)
+	if !ok {
+		t.Fatalf("customfield_12901 = %#v; want []any", fields["customfield_12901"])
+	}
+	want := []string{"26.4", "master"}
+	if len(got) != len(want) {
+		t.Fatalf("len = %d; want %d", len(got), len(want))
+	}
+	for i, w := range want {
+		if got[i] != w {
+			t.Errorf("[%d] = %v; want %q", i, got[i], w)
+		}
+	}
+}
+
 func TestHydrateWorkspace(t *testing.T) {
 	ws := &core.Workspace{
 		Slug: "eng",
