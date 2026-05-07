@@ -26,6 +26,9 @@ type DetailModel struct {
 
 	// Sorted children for the current issue (for hint-key navigation).
 	sortedChildren []*core.WorkItem
+	// Linked targets present in the registry, in render order. Hint keys
+	// for these begin AFTER the children (single shared keymap pool).
+	relatedTargets []*core.WorkItem
 	// Available single-key hints for child navigation (computed from keymap).
 	hintKeys []rune
 }
@@ -134,6 +137,28 @@ func (m *DetailModel) ChildIndexForKey(r rune) int {
 		}
 	}
 	return -1
+}
+
+// NavTargetForKey resolves a hint key against the unified children + related
+// pool, returning the target WorkItem or nil. Hint keys are assigned in the
+// order children are rendered, then the related-table entries that exist in
+// the registry. Use this from the key handler so a single press jumps to
+// either kind without the caller knowing which section owns the key.
+func (m *DetailModel) NavTargetForKey(r rune) *core.WorkItem {
+	for i, hint := range m.hintKeys {
+		if hint != r {
+			continue
+		}
+		if i < len(m.sortedChildren) {
+			return m.sortedChildren[i]
+		}
+		j := i - len(m.sortedChildren)
+		if j < len(m.relatedTargets) {
+			return m.relatedTargets[j]
+		}
+		return nil
+	}
+	return nil
 }
 
 // Breadcrumb returns a display string showing the navigation path.

@@ -110,7 +110,7 @@ func (p *Provider) buildWellKnownFields() wellKnownFields {
 
 		// --- System metadata (excluded from FieldDef discovery) ---
 		"creator":                       {Key: "creator", Excluded: true},
-		"issuelinks":                    {Key: "issuelinks", Excluded: true},
+		"issuelinks":                    {Key: "issuelinks", SearchField: true, Excluded: true},
 		"attachment":                    {Key: "attachment", Excluded: true},
 		"worklog":                       {Key: "worklog", Excluded: true},
 		"votes":                         {Key: "votes", Excluded: true},

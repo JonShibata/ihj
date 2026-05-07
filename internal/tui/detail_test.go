@@ -774,3 +774,92 @@ func TestDetailView_UnassignedShowsEmDash(t *testing.T) {
 		t.Error("unassigned item should show em dash (" + core.GlyphEmDash + ") placeholder in detail view")
 	}
 }
+
+func TestDetailRelatedNavigation(t *testing.T) {
+	registry := map[string]*core.WorkItem{
+		"PROJ-10": {ID: "PROJ-10", Summary: "Main", Type: "Story", Status: "In Progress",
+			Links: []core.Link{
+				{RelType: "blocks", RelOrder: 2, Target: "PROJ-11", TargetSummary: "Downstream", TargetType: "Task", TargetStatus: "To Do"},
+				{RelType: "is blocked by", RelOrder: 1, Target: "PROJ-12", TargetSummary: "Upstream", TargetType: "Task", TargetStatus: "Done"},
+				{RelType: "relates to", RelOrder: 9, Target: "PROJ-99", TargetSummary: "Offscreen", TargetType: "Task", TargetStatus: "Open"}, // not in registry
+			},
+		},
+		"PROJ-11": {ID: "PROJ-11", Summary: "Downstream", Type: "Task", Status: "To Do"},
+		"PROJ-12": {ID: "PROJ-12", Summary: "Upstream", Type: "Task", Status: "Done"},
+	}
+	core.LinkChildren(registry)
+
+	theme := terminal.DefaultTheme()
+	styles := terminal.NewStyles(theme, nil, "")
+	keys := terminal.DefaultKeyMap()
+	dm := tui.NewDetailModel(styles, registry, testWS("rel"), keys)
+	dm.SetSize(120, 40)
+	dm.SetIssue(registry["PROJ-10"])
+
+	view := stripANSI(dm.View())
+	if !strings.Contains(view, "RELATED ISSUES") {
+		t.Fatalf("RELATED ISSUES section missing\n%s", view)
+	}
+	if !strings.Contains(view, "PROJ-11") || !strings.Contains(view, "PROJ-12") {
+		t.Error("related table should list both registry-resident links")
+	}
+	if !strings.Contains(view, "PROJ-99") {
+		t.Error("non-registry link should still be displayed (read-only)")
+	}
+
+	// "is blocked by" (order 1) outranks "blocks" (order 2): first hint key
+	// (no children → starts at hintKeys[0]) goes to PROJ-12.
+	hint := keys.HintKeys()[0]
+	target := dm.NavTargetForKey(hint)
+	if target == nil || target.ID != "PROJ-12" {
+		gotID := ""
+		if target != nil {
+			gotID = target.ID
+		}
+		t.Errorf("first hint = %q; want PROJ-12, got %q", string(hint), gotID)
+	}
+
+	// Second hint should jump to PROJ-11 (next in-registry link).
+	target2 := dm.NavTargetForKey(keys.HintKeys()[1])
+	if target2 == nil || target2.ID != "PROJ-11" {
+		gotID := ""
+		if target2 != nil {
+			gotID = target2.ID
+		}
+		t.Errorf("second hint: want PROJ-11, got %q", gotID)
+	}
+
+	// Non-registry link must NOT consume a hint.
+	for _, h := range keys.HintKeys() {
+		if got := dm.NavTargetForKey(h); got != nil && got.ID == "PROJ-99" {
+			t.Errorf("PROJ-99 should not be navigable (not in registry)")
+		}
+	}
+}
+
+func TestDetailNavTargetForKey_ChildrenBeforeRelated(t *testing.T) {
+	// When the issue has both children and links, hint keys are assigned to
+	// children first, then to the in-registry related items.
+	registry := map[string]*core.WorkItem{
+		"P-1":  {ID: "P-1", Summary: "Parent", Type: "Epic", Status: "Open", Links: []core.Link{{RelType: "blocks", Target: "P-9"}}},
+		"C-1":  {ID: "C-1", Summary: "Child A", Type: "Story", Status: "To Do", ParentID: "P-1"},
+		"P-9":  {ID: "P-9", Summary: "Linked", Type: "Task", Status: "Done"},
+	}
+	core.LinkChildren(registry)
+
+	theme := terminal.DefaultTheme()
+	styles := terminal.NewStyles(theme, nil, "")
+	keys := terminal.DefaultKeyMap()
+	dm := tui.NewDetailModel(styles, registry, testWS("mix"), keys)
+	dm.SetSize(120, 40)
+	dm.SetIssue(registry["P-1"])
+	_ = dm.View() // populate sortedChildren / relatedTargets
+
+	hints := keys.HintKeys()
+	if got := dm.NavTargetForKey(hints[0]); got == nil || got.ID != "C-1" {
+		t.Errorf("first hint: want C-1, got %v", got)
+	}
+	if got := dm.NavTargetForKey(hints[1]); got == nil || got.ID != "P-9" {
+		t.Errorf("second hint: want P-9, got %v", got)
+	}
+}

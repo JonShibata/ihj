@@ -80,10 +80,71 @@ func issuesToWorkItems(issues []issue, wk wellKnownFields, customFields map[stri
 			}
 		}
 
+		item.Links = buildLinks(f)
+
 		items = append(items, item)
 	}
 
 	return items
+}
+
+// linkSortOrder ranks relationship types so the detail pane shows the
+// most actionable rows first (parent → blocks → blocked by → relates to).
+var linkSortOrder = map[string]int{
+	"parent":        0,
+	"is blocked by": 1,
+	"blocks":        2,
+}
+
+// buildLinks projects parent + issuelinks into core.Link rows.
+func buildLinks(f *issueFields) []core.Link {
+	var links []core.Link
+
+	if f.Parent != nil && f.Parent.Key != "" {
+		l := core.Link{
+			RelType:  "parent",
+			RelOrder: linkSortOrder["parent"],
+			Target:   f.Parent.Key,
+		}
+		if f.Parent.Fields != nil {
+			l.TargetSummary = f.Parent.Fields.Summary
+			l.TargetType = f.Parent.Fields.IssueType.Name
+			l.TargetStatus = f.Parent.Fields.Status.Name
+		}
+		links = append(links, l)
+	}
+
+	for _, il := range f.IssueLinks {
+		var target *linkedIssue
+		var rel string
+		if il.OutwardIssue != nil {
+			target = il.OutwardIssue
+			rel = il.Type.Outward
+		} else if il.InwardIssue != nil {
+			target = il.InwardIssue
+			rel = il.Type.Inward
+		}
+		if target == nil || target.Key == "" {
+			continue
+		}
+		order, ok := linkSortOrder[rel]
+		if !ok {
+			order = 9
+		}
+		l := core.Link{
+			RelType:  rel,
+			RelOrder: order,
+			Target:   target.Key,
+		}
+		if target.Fields != nil {
+			l.TargetSummary = target.Fields.Summary
+			l.TargetType = target.Fields.IssueType.Name
+			l.TargetStatus = target.Fields.Status.Name
+		}
+		links = append(links, l)
+	}
+
+	return links
 }
 
 // issueToWorkItem converts a single Jira issue to a core.WorkItem.

@@ -13,6 +13,7 @@ const (
 	IconType        = "\u22a1 " // ⊡ squared dot — issue type
 	IconParent      = "\u25b3 " // △ up triangle — parent link
 	IconChildren    = "\u229e " // ⊞ squared plus — child issues
+	IconRelated     = "\u29c9 " // ⧉ two joined squares — related/linked issues
 	IconComments    = "\u00a7 " // § section sign — comments
 	IconFields      = "\u2263 " // ≣ four lines — field list
 	IconField       = "\u25aa " // ▪ small black square — generic field fallback

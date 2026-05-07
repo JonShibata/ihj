@@ -78,3 +78,66 @@ func TestIssuesToWorkItems_MissingCustomFieldSkipped(t *testing.T) {
 		t.Error("field not in Jira response should not appear in Fields")
 	}
 }
+
+func TestIssuesToWorkItems_LinksFromIssueLinksAndParent(t *testing.T) {
+	fields := &issueFields{
+		Summary:   "Has links",
+		IssueType: issueType{ID: "11", Name: "Task"},
+		Status:    status{Name: "In Progress"},
+		Parent: &parentRef{
+			Key: "EPIC-7",
+			Fields: &struct {
+				Summary   string    `json:"summary"`
+				Status    status    `json:"status"`
+				IssueType issueType `json:"issuetype"`
+			}{Summary: "Parent epic", Status: status{Name: "In Progress"}, IssueType: issueType{Name: "Epic"}},
+		},
+		IssueLinks: []issueLink{
+			{
+				Type:        issueLinkType{Name: "Blocks", Outward: "blocks", Inward: "is blocked by"},
+				OutwardIssue: &linkedIssue{Key: "DOWN-1", Fields: &struct {
+					Summary   string    `json:"summary"`
+					Status    status    `json:"status"`
+					IssueType issueType `json:"issuetype"`
+				}{Summary: "Downstream", Status: status{Name: "To Do"}, IssueType: issueType{Name: "Task"}}},
+			},
+			{
+				Type:        issueLinkType{Name: "Blocks", Outward: "blocks", Inward: "is blocked by"},
+				InwardIssue: &linkedIssue{Key: "UP-1", Fields: &struct {
+					Summary   string    `json:"summary"`
+					Status    status    `json:"status"`
+					IssueType issueType `json:"issuetype"`
+				}{Summary: "Upstream", Status: status{Name: "Done"}, IssueType: issueType{Name: "Task"}}},
+			},
+		},
+	}
+
+	items := issuesToWorkItems([]issue{{Key: "T-1", Fields: *fields}}, nil, nil)
+	if len(items) != 1 {
+		t.Fatalf("got %d items", len(items))
+	}
+	links := items[0].Links
+	if len(links) != 3 {
+		t.Fatalf("Links = %d; want 3 (parent + 2 issuelinks)", len(links))
+	}
+	// parent first (RelOrder 0).
+	if links[0].RelType != "parent" || links[0].Target != "EPIC-7" {
+		t.Errorf("[0] = %+v; want parent → EPIC-7", links[0])
+	}
+	// outward link's RelType is the type's Outward string.
+	var hasBlocks, hasBlockedBy bool
+	for _, l := range links[1:] {
+		if l.RelType == "blocks" && l.Target == "DOWN-1" {
+			hasBlocks = true
+			if l.TargetSummary != "Downstream" {
+				t.Errorf("blocks summary = %q; want Downstream", l.TargetSummary)
+			}
+		}
+		if l.RelType == "is blocked by" && l.Target == "UP-1" {
+			hasBlockedBy = true
+		}
+	}
+	if !hasBlocks || !hasBlockedBy {
+		t.Errorf("expected both blocks and is blocked by entries; got %+v", links)
+	}
+}

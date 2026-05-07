@@ -30,6 +30,7 @@ type issueFields struct {
 	Labels      []string        `json:"labels"`
 	Components  []component     `json:"components"`
 	Comment     *commentPage    `json:"comment,omitempty"`
+	IssueLinks  []issueLink     `json:"issuelinks,omitempty"`
 	Created     string          `json:"created"`
 	Updated     string          `json:"updated"`
 
@@ -102,6 +103,36 @@ func (u *user) EmailOrDefault(fallback string) string {
 // parentRef is a minimal reference to a parent issue.
 // Spec ref: IssueBean.fields.parent (subset of IssueBean)
 type parentRef struct {
+	Key    string `json:"key"`
+	ID     string `json:"id"`
+	Fields *struct {
+		Summary   string    `json:"summary"`
+		Status    status    `json:"status"`
+		IssueType issueType `json:"issuetype"`
+	} `json:"fields,omitempty"`
+}
+
+// issueLink is one entry in IssueBean.fields.issuelinks. Exactly one of
+// InwardIssue / OutwardIssue is populated, depending on which side of the
+// relationship the parent issue sits.
+// Spec ref: IssueLink
+type issueLink struct {
+	ID           string         `json:"id"`
+	Type         issueLinkType  `json:"type"`
+	InwardIssue  *linkedIssue   `json:"inwardIssue,omitempty"`
+	OutwardIssue *linkedIssue   `json:"outwardIssue,omitempty"`
+}
+
+// issueLinkType holds the human-readable relationship names.
+type issueLinkType struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`    // e.g. "Blocks"
+	Inward  string `json:"inward"`  // e.g. "is blocked by"
+	Outward string `json:"outward"` // e.g. "blocks"
+}
+
+// linkedIssue is the minimal projection of the issue at the other end of a link.
+type linkedIssue struct {
 	Key    string `json:"key"`
 	ID     string `json:"id"`
 	Fields *struct {

@@ -80,6 +80,7 @@ func (m *DetailModel) rebuildContent() {
 	m.renderDescription(&buf, wrapWidth)
 	m.renderRichTextBlocks(&buf, divider, wrapWidth)
 	m.renderChildrenTable(&buf, divider)
+	m.renderRelatedTable(&buf, divider)
 	m.renderComments(&buf, divider, wrapWidth)
 	m.viewport.SetContent(buf.String())
 }
@@ -221,6 +222,113 @@ func (m *DetailModel) renderChildrenTable(buf *strings.Builder, divider string) 
 		Rows(rows...)
 
 	buf.WriteString(childTable.Render() + "\n")
+}
+
+// ── Related table ───────────────────────────────────────────────────
+
+// renderRelatedTable lists non-hierarchical relationships (parent + issue
+// links) with hint keys for navigation. Hint keys continue from where the
+// children table left off so a single keypress drills into either kind of
+// neighbour. Targets that aren't in the registry render without a hint
+// (you'd need to switch filters to bring them into view first).
+func (m *DetailModel) renderRelatedTable(buf *strings.Builder, divider string) {
+	m.relatedTargets = nil
+	issue := m.issue
+	if issue == nil || len(issue.Links) == 0 {
+		return
+	}
+	styles := m.styles
+
+	links := make([]core.Link, len(issue.Links))
+	copy(links, issue.Links)
+	sort.SliceStable(links, func(i, j int) bool {
+		if links[i].RelOrder != links[j].RelOrder {
+			return links[i].RelOrder < links[j].RelOrder
+		}
+		return links[i].Target < links[j].Target
+	})
+
+	buf.WriteString("\n" + divider + "\n")
+	buf.WriteString(styles.ChildSection.Render(core.IconRelated+"RELATED ISSUES") + "\n")
+
+	hintBase := len(m.sortedChildren)
+	var rows [][]string
+	for _, l := range links {
+		target := m.registry[l.Target]
+		hint := ""
+		if target != nil {
+			idx := hintBase + len(m.relatedTargets)
+			if idx < len(m.hintKeys) {
+				hint = fmt.Sprintf("[%c]", m.hintKeys[idx])
+			}
+			m.relatedTargets = append(m.relatedTargets, target)
+		}
+
+		summary := l.TargetSummary
+		typeName := l.TargetType
+		statusName := l.TargetStatus
+		if target != nil {
+			// Prefer registry-fresh values when available.
+			summary = target.Summary
+			typeName = target.Type
+			statusName = target.Status
+		}
+		if len(typeName) > maxChildTypeWidth {
+			typeName = typeName[:maxChildTypeWidth]
+		}
+		if len(statusName) > maxChildStatusWidth {
+			statusName = statusName[:maxChildStatusWidth]
+		}
+		statusIcon := ""
+		if statusName != "" {
+			statusIcon, _ = styles.StatusStyle(statusName)
+			statusIcon += " "
+		}
+
+		rows = append(rows, []string{
+			core.GlyphReturn,
+			l.Target,
+			l.RelType,
+			typeName,
+			statusIcon + statusName,
+			summary,
+			hint,
+		})
+	}
+
+	relatedTable := table.New().
+		Border(lipgloss.HiddenBorder()).
+		BorderColumn(false).
+		BorderHeader(false).
+		StyleFunc(func(row, col int) lipgloss.Style {
+			padded := lipgloss.NewStyle().PaddingRight(1)
+			if row < 0 || row >= len(links) {
+				return padded
+			}
+			l := links[row]
+			typeColor := styles.TypeColor(l.TargetType)
+			_, statusColor := styles.StatusStyle(l.TargetStatus)
+
+			switch col {
+			case 0: // tree glyph
+				return styles.TreeGlyph.PaddingRight(1)
+			case 1: // ID
+				return lipgloss.NewStyle().Foreground(typeColor).Bold(true).PaddingRight(1)
+			case 2: // relation
+				return lipgloss.NewStyle().Faint(true).PaddingRight(1)
+			case 3: // type
+				return lipgloss.NewStyle().Foreground(typeColor).PaddingRight(1)
+			case 4: // status
+				return lipgloss.NewStyle().Foreground(statusColor).PaddingRight(1)
+			case 6: // hint
+				return lipgloss.NewStyle().Faint(true).PaddingRight(1)
+			default:
+				return padded
+			}
+		}).
+		Rows(rows...)
+
+	buf.WriteString(relatedTable.Render() + "\n")
 }
 
 // ── Comments ────────────────────────────────────────────────────────

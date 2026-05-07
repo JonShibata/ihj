@@ -14,6 +14,8 @@ The detail pane displays the selected issue's metadata in sections:
 - **Parent** — parent issue link (shown when set).
 - **FIELDS** — custom and dynamic fields discovered from the provider. Auto-discovered fields only appear when they have a value. Pinned fields (configured via `fields` on the issue type) always appear, with an em dash if empty.
 - **Description** — rendered Markdown from the issue body.
+- **Child issues** — direct children with hint keys for navigation.
+- **Related issues** — non-hierarchical links (parent, blocks, blocked by, relates to). Targets present in the current filter view get hint keys and behave like children. Targets outside the view render without a hint — switch filters to bring them into scope.
 - **Comments** — the three most recent comments.
 
 ## Layout
@@ -22,7 +24,7 @@ The detail pane displays the selected issue's metadata in sections:
 - **Tab** toggles keyboard focus between panes without changing the layout.
 - **Esc** exits focus mode, then clears search, then quits (in that priority order).
 
-When the detail pane is focused (via Tab or Enter), `Up`/`Down` scroll the detail content, hint keys (`0`-`9`, then `a`-`z`) navigate child issues, and `Backspace` pops back one level. All action keys work regardless of focus state.
+When the detail pane is focused (via Tab or Enter), `Up`/`Down` scroll the detail content, hint keys (`0`-`9`, then `a`-`z`) navigate child and related issues (children first, then related), and `Backspace` pops back one level. All action keys work regardless of focus state.
 
 ## Key Bindings (Default Mode)
 

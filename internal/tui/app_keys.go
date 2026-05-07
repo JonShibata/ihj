@@ -142,11 +142,11 @@ func (m *AppModel) tryChildNavigation(msg tea.KeyPressMsg) bool {
 	if len([]rune(pressed)) != 1 {
 		return false
 	}
-	childIndex := m.detail.ChildIndexForKey([]rune(pressed)[0])
-	if childIndex < 0 {
+	target := m.detail.NavTargetForKey([]rune(pressed)[0])
+	if target == nil {
 		return false
 	}
-	m.detail.NavigateToChild(childIndex)
+	m.detail.NavigateTo(target)
 	m.recalcLayout()
 	if issue := m.detail.Issue(); issue != nil {
 		m.ui.Emit(EventNavigated, "id", issue.ID, "breadcrumb", m.detail.Breadcrumb())

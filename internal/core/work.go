@@ -60,6 +60,26 @@ type WorkItem struct {
 	Presence FieldPresence `json:"-" yaml:"-"`
 
 	Children []*WorkItem `json:"children" yaml:"-"`
+
+	// Links are non-hierarchical relationships (blocks, blocked by,
+	// relates to, parent surfaced as a link). Providers populate them
+	// from issuelinks-style API data; the TUI renders them in a "Related"
+	// section with hint-key navigation.
+	Links []Link `json:"links,omitempty" yaml:"-"`
+}
+
+// Link describes one non-hierarchical relationship from this work item to
+// another. RelType is the user-visible relation name ("blocks",
+// "is blocked by", "relates to", "parent"), Target is the target's ID,
+// and TargetSummary/Type/Status echo enough of the target for the TUI
+// to render a row without a second fetch.
+type Link struct {
+	RelType       string `json:"relType"`
+	RelOrder      int    `json:"-"` // sort weight, lower = earlier
+	Target        string `json:"target"`
+	TargetSummary string `json:"targetSummary,omitempty"`
+	TargetType    string `json:"targetType,omitempty"`
+	TargetStatus  string `json:"targetStatus,omitempty"`
 }
 
 // Field accessors for common Fields entries.
