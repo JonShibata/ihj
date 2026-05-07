@@ -5,6 +5,7 @@ package jira
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -177,7 +178,14 @@ func (p *Provider) resolveCreateMeta() (*cachedCreateMeta, error) {
 		typeID := fmt.Sprintf("%d", tc.ID)
 		fields, err := p.client.FetchCreateMetaFields(ctx, project, typeID)
 		if err != nil {
-			// Graceful fallback: if createmeta is unavailable for any type, abort.
+			// 404 / 403 typically mean the user can read the project but
+			// can't create issues of this type — common when a personal
+			// account uses a project where create permission is locked
+			// down. Skip the type so loadFieldMeta falls back to the
+			// global field set; abort only on unexpected errors.
+			if isNotAuthorisedToCreate(err) {
+				continue
+			}
 			return nil, fmt.Errorf("fetching createmeta for type %s (%s): %w", typeID, tc.Name, err)
 		}
 		meta.Types[typeID] = fields
@@ -186,6 +194,17 @@ func (p *Provider) resolveCreateMeta() (*cachedCreateMeta, error) {
 	// Persist to disk.
 	_ = saveCreateMetaCache(p.cacheDir, slug, meta)
 	return meta, nil
+}
+
+// isNotAuthorisedToCreate reports whether err is the Jira "you cannot
+// create issues in this project" 404 / 403 — the only condition under
+// which we silently skip a type during createmeta discovery.
+func isNotAuthorisedToCreate(err error) bool {
+	var ae *apiError
+	if !errors.As(err, &ae) {
+		return false
+	}
+	return ae.StatusCode == 404 || ae.StatusCode == 403
 }
 
 // linkGlobalsToMeta populates well-known global FieldDefs with runtime data
