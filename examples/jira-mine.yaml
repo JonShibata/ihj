@@ -1,0 +1,56 @@
+# ihj workspace config — "my open tickets" focus
+#
+# Modeled on the jilm shell script's picker query: shows everything
+# assigned to you that isn't closed, plus tickets you've already finished
+# in the current sprint (so retros and standups still see them).
+#
+# Replace PROJ / company.atlassian.net / board_id with your values, then
+# launch with `ihj` (the default filter "mine" is selected on startup).
+
+editor: "nvim"
+default_workspace: "mine"
+
+servers:
+  my-jira:
+    provider: "jira"
+    url: "https://company.atlassian.net"
+
+workspaces:
+  mine:
+    server: "my-jira"
+    name: "My Open"
+    board_id: 42
+    board_type: "scrum"
+    project_key: "PROJ"
+
+    fields:
+      sprint: 10020
+      story_points: 10016
+
+    # Base JQL is intentionally broad — the "mine" filter narrows it.
+    jql: 'ORDER BY Rank ASC'
+
+    filters:
+      # Match jilm's pick_ticket: open work + sprint-completed tickets.
+      mine: 'assignee = currentUser() AND status != Closed AND (resolution = Unresolved OR (status = Done AND sprint IN openSprints()))'
+      # Drop the sprint clause if you don't want completed work to linger.
+      mine_strict: 'assignee = currentUser() AND statusCategory != Done'
+      reported: 'reporter = currentUser() AND statusCategory != Done'
+      all: 'assignee = currentUser()'
+
+    # Order matches jilm's awk sort: triage first, done last.
+    statuses:
+      - { name: Needs Triage,            order: 10, color: red }
+      - { name: To Do,                   order: 20, color: cyan }
+      - { name: Blocked,                 order: 30, color: yellow }
+      - { name: Development in Progress, order: 40, color: blue }
+      - { name: In Progress,             order: 40, color: blue }
+      - { name: PR Review,               order: 50, color: magenta }
+      - { name: Ready to Test,           order: 55, color: magenta }
+      - { name: Done,                    order: 60, color: green }
+
+    types:
+      - { id: 10001, name: Task,    order: 30, color: default, has_children: true }
+      - { id: 10004, name: Story,   order: 30, color: blue,    has_children: true }
+      - { id: 10007, name: Bug,     order: 30, color: red,     has_children: true }
+      - { id: 10006, name: Subtask, order: 40, color: white,   has_children: false }
