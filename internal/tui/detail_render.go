@@ -234,13 +234,17 @@ func (m *DetailModel) renderChildrenTable(buf *strings.Builder, divider string) 
 func (m *DetailModel) renderRelatedTable(buf *strings.Builder, divider string) {
 	m.relatedTargets = nil
 	issue := m.issue
-	if issue == nil || len(issue.Links) == 0 {
+	if issue == nil {
 		return
 	}
 	styles := m.styles
 
-	links := make([]core.Link, len(issue.Links))
-	copy(links, issue.Links)
+	links := make([]core.Link, 0, len(issue.Links))
+	links = append(links, issue.Links...)
+	links = append(links, siblingLinks(issue, m.registry)...)
+	if len(links) == 0 {
+		return
+	}
 	sort.SliceStable(links, func(i, j int) bool {
 		if links[i].RelOrder != links[j].RelOrder {
 			return links[i].RelOrder < links[j].RelOrder
@@ -329,6 +333,36 @@ func (m *DetailModel) renderRelatedTable(buf *strings.Builder, divider string) {
 		Rows(rows...)
 
 	buf.WriteString(relatedTable.Render() + "\n")
+}
+
+// siblingLinks synthesises Link rows for the issue's siblings — items that
+// share the same parent. The parent must be present in the registry; if it
+// isn't, no siblings are produced (and the user can switch filters to bring
+// it into scope, same as for any other related-table target). RelOrder 4
+// matches jilm's pick_related ordering: after blocks, before relates-to.
+func siblingLinks(issue *core.WorkItem, registry map[string]*core.WorkItem) []core.Link {
+	if issue.ParentID == "" {
+		return nil
+	}
+	parent := registry[issue.ParentID]
+	if parent == nil {
+		return nil
+	}
+	out := make([]core.Link, 0, len(parent.Children))
+	for _, sib := range parent.Children {
+		if sib == nil || sib.ID == issue.ID {
+			continue
+		}
+		out = append(out, core.Link{
+			RelType:       "sibling",
+			RelOrder:      4,
+			Target:        sib.ID,
+			TargetSummary: sib.Summary,
+			TargetType:    sib.Type,
+			TargetStatus:  sib.Status,
+		})
+	}
+	return out
 }
 
 // ── Comments ────────────────────────────────────────────────────────

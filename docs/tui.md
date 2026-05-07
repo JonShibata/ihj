@@ -15,7 +15,7 @@ The detail pane displays the selected issue's metadata in sections:
 - **FIELDS** — custom and dynamic fields discovered from the provider. Auto-discovered fields only appear when they have a value. Pinned fields (configured via `fields` on the issue type) always appear, with an em dash if empty.
 - **Description** — rendered Markdown from the issue body.
 - **Child issues** — direct children with hint keys for navigation.
-- **Related issues** — non-hierarchical links (parent, blocks, blocked by, relates to). Targets present in the current filter view get hint keys and behave like children. Targets outside the view render without a hint — switch filters to bring them into scope.
+- **Related issues** — non-hierarchical links (parent, blocks, blocked by, siblings sharing the same parent, relates to). Targets present in the current filter view get hint keys and behave like children. Targets outside the view render without a hint — switch filters to bring them into scope.
 - **Comments** — the three most recent comments.
 
 ## Layout

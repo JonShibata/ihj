@@ -837,6 +837,69 @@ func TestDetailRelatedNavigation(t *testing.T) {
 	}
 }
 
+func TestDetailSiblingNavigation(t *testing.T) {
+	// Three siblings under one parent. Selecting STORY-2 should produce
+	// sibling rows for STORY-1 and STORY-3 (but not for STORY-2 itself),
+	// each navigable via the related-table hint keys.
+	registry := map[string]*core.WorkItem{
+		"EPIC-1":  {ID: "EPIC-1", Summary: "Parent epic", Type: "Epic", Status: "Open"},
+		"STORY-1": {ID: "STORY-1", Summary: "First", Type: "Story", Status: "To Do", ParentID: "EPIC-1"},
+		"STORY-2": {ID: "STORY-2", Summary: "Middle", Type: "Story", Status: "In Progress", ParentID: "EPIC-1"},
+		"STORY-3": {ID: "STORY-3", Summary: "Last", Type: "Story", Status: "Done", ParentID: "EPIC-1"},
+	}
+	core.LinkChildren(registry)
+
+	theme := terminal.DefaultTheme()
+	styles := terminal.NewStyles(theme, nil, "")
+	keys := terminal.DefaultKeyMap()
+	dm := tui.NewDetailModel(styles, registry, testWS("sib"), keys)
+	dm.SetSize(120, 40)
+	dm.SetIssue(registry["STORY-2"])
+
+	view := stripANSI(dm.View())
+	if !strings.Contains(view, "RELATED ISSUES") {
+		t.Fatalf("RELATED ISSUES section missing\n%s", view)
+	}
+	if !strings.Contains(view, "STORY-1") || !strings.Contains(view, "STORY-3") {
+		t.Errorf("siblings missing from related table\n%s", view)
+	}
+	if strings.Count(view, "STORY-2") > 1 {
+		t.Errorf("STORY-2 should not be its own sibling\n%s", view)
+	}
+
+	hints := keys.HintKeys()
+	first := dm.NavTargetForKey(hints[0])
+	second := dm.NavTargetForKey(hints[1])
+	if first == nil || second == nil {
+		t.Fatal("expected two hint-navigable siblings")
+	}
+	got := map[string]bool{first.ID: true, second.ID: true}
+	if !got["STORY-1"] || !got["STORY-3"] {
+		t.Errorf("hints did not cover both siblings; got %v", got)
+	}
+}
+
+func TestDetailSiblings_ParentMissing(t *testing.T) {
+	// When the parent isn't in the registry, no siblings can be derived
+	// (the user would need to switch filters first). Render must not panic.
+	registry := map[string]*core.WorkItem{
+		"ORPHAN-1": {ID: "ORPHAN-1", Summary: "Orphan", Type: "Task", Status: "To Do", ParentID: "EPIC-9"},
+	}
+	core.LinkChildren(registry)
+
+	theme := terminal.DefaultTheme()
+	styles := terminal.NewStyles(theme, nil, "")
+	keys := terminal.DefaultKeyMap()
+	dm := tui.NewDetailModel(styles, registry, testWS("orphan"), keys)
+	dm.SetSize(120, 40)
+	dm.SetIssue(registry["ORPHAN-1"])
+
+	view := stripANSI(dm.View())
+	if strings.Contains(view, "RELATED ISSUES") {
+		t.Errorf("RELATED ISSUES should not appear when there are no siblings or links\n%s", view)
+	}
+}
+
 func TestDetailNavTargetForKey_ChildrenBeforeRelated(t *testing.T) {
 	// When the issue has both children and links, hint keys are assigned to
 	// children first, then to the in-registry related items.
