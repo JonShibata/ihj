@@ -20,4 +20,5 @@ const (
 	ActionNew
 	ActionWorkspace
 	ActionSprint
+	ActionView
 )

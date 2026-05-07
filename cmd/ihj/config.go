@@ -61,6 +61,7 @@ type rawWorkspace struct {
 	Priorities      []rawPriorityConfig            `yaml:"priorities,omitempty"` // Optional sort order; defaults to standard Jira order.
 	Filters         map[string]string              `yaml:"filters"`
 	TransitionHooks map[string][]rawTransitionHook `yaml:"transition_hooks,omitempty"`
+	ViewCommand     string                         `yaml:"view_command,omitempty"`
 }
 
 type rawTransitionHook struct {
@@ -173,6 +174,7 @@ func loadConfig(path string) (configResult, error) {
 		"server": true, "name": true, "types": true, "statuses": true, "filters": true,
 		"cache_ttl": true, "guidance": true, "extract": true, "fields": true,
 		"transition_hooks": true,
+		"view_command":     true,
 	}
 
 	// Parse global cache TTL (falls back to core.DefaultCacheTTL).
@@ -302,6 +304,7 @@ func loadConfig(path string) (configResult, error) {
 			Statuses:         statuses,
 			Priorities:       priorities,
 			Filters:          rws.Filters,
+			ViewCommand:      rws.ViewCommand,
 			FieldAliases:     parseIntMap(rws.Fields),
 			TransitionHooks:  hooks,
 			StatusOrderMap:   statusOrderMap,

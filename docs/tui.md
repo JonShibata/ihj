@@ -59,6 +59,7 @@ When the detail pane is focused (via Tab or Enter), `Up`/`Down` scroll the detai
 | `Alt+F`  | Switch filter                      |
 | `Alt+W`  | Switch workspace                   |
 | `Alt+S`  | Assign to sprint                   |
+| `Alt+V`  | View issue via external command (see [view_command](#external-viewer)) |
 | `Alt+R`  | Refresh data                       |
 | `Alt+/`  | Show help overlay                  |
 
@@ -89,6 +90,7 @@ Single-character keys for actions and navigation:
 | `f`   | Switch filter                      |
 | `w`   | Switch workspace                   |
 | `s`   | Assign to sprint                   |
+| `v`   | View issue via external command    |
 | `r`   | Refresh data                       |
 | `/`   | Enter search mode                  |
 | `:`   | Enter command mode                 |
@@ -128,6 +130,23 @@ shortcuts:
   branch: "ctrl+b"
 ```
 
-Available actions: `refresh`, `filter`, `workspace`, `sprint`, `edit`, `new`, `transition`, `assign`, `comment`, `open`, `branch`, `extract`.
+Available actions: `refresh`, `filter`, `workspace`, `sprint`, `view`, `edit`, `new`, `transition`, `assign`, `comment`, `open`, `branch`, `extract`.
+
+## External viewer
+
+Bubble Tea renders to ANSI; it can't paint inline images. When a workspace
+defines `view_command:`, pressing `Alt+V` (or `v` in vim mode) suspends
+the TUI and runs the configured viewer with stdin/stdout/stderr attached
+to your terminal. Useful for tools like `mdcat` that emit kitty graphics
+protocol escapes for ticket attachments.
+
+```yaml
+workspaces:
+  mine:
+    view_command: "/home/me/bin/jira_issue_view.sh {key}"
+```
+
+The template is whitespace-split; `{key}` substitutes with the selected
+issue's ID. When the viewer exits, the TUI redraws automatically.
 
 Shortcuts must include a modifier prefix (`alt+`, `ctrl+`, `super+`, `hyper+`). Collisions with reserved bindings are rejected at config load.

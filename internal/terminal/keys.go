@@ -42,6 +42,7 @@ type KeyMap struct {
 	New        key.Binding
 	Workspace  key.Binding
 	Sprint     key.Binding
+	View       key.Binding
 
 	// Vim mode switches
 	Search  key.Binding
@@ -57,7 +58,7 @@ func (k KeyMap) ActionBindings() []key.Binding {
 	return []key.Binding{
 		k.Refresh, k.Filter, k.Assign, k.Transition,
 		k.Open, k.Edit, k.Comment, k.Branch,
-		k.Extract, k.New, k.Workspace, k.Sprint,
+		k.Extract, k.New, k.Workspace, k.Sprint, k.View,
 	}
 }
 
@@ -79,7 +80,7 @@ func (k KeyMap) FullHelp() [][]key.Binding {
 		{k.Up, k.Down, k.Home, k.End, k.PageUp, k.PageDn},
 		{k.DetailUp, k.DetailDown, k.Focus, k.Tab},
 		{k.Refresh, k.Filter, k.Assign, k.Transition, k.Open},
-		{k.Edit, k.Comment, k.Branch, k.Extract, k.New, k.Workspace, k.Sprint},
+		{k.Edit, k.Comment, k.Branch, k.Extract, k.New, k.Workspace, k.Sprint, k.View},
 		{k.Cancel, k.Quit},
 	}
 }
@@ -124,7 +125,7 @@ func (k KeyMap) allBindings() []key.Binding {
 		k.DetailUp, k.DetailDown, k.Focus, k.Tab,
 		k.Refresh, k.Filter, k.Assign, k.Transition,
 		k.Open, k.Edit, k.Comment, k.Branch,
-		k.Extract, k.New, k.Workspace, k.Sprint,
+		k.Extract, k.New, k.Workspace, k.Sprint, k.View,
 		k.Search, k.Command,
 		k.Submit, k.Cancel,
 	}
@@ -235,6 +236,10 @@ func VimKeyMap() KeyMap {
 		Sprint: key.NewBinding(
 			key.WithKeys("s"),
 			key.WithHelp("s", "Sprint"),
+		),
+		View: key.NewBinding(
+			key.WithKeys("v"),
+			key.WithHelp("v", "View"),
 		),
 
 		// Vim mode switches
@@ -364,6 +369,10 @@ func DefaultKeyMap() KeyMap {
 			key.WithKeys("alt+s"),
 			key.WithHelp("Alt-S", "Sprint"),
 		),
+		View: key.NewBinding(
+			key.WithKeys("alt+v"),
+			key.WithHelp("Alt-V", "View"),
+		),
 
 		// Input
 		Submit: key.NewBinding(
@@ -400,6 +409,7 @@ func (k *KeyMap) ApplyShortcuts(shortcuts map[string]string) error {
 		"new":        &k.New,
 		"workspace":  &k.Workspace,
 		"sprint":     &k.Sprint,
+		"view":       &k.View,
 	}
 
 	// Shortcuts must use a modifier prefix (alt, ctrl, super, hyper) to avoid

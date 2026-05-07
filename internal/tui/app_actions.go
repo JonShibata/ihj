@@ -1,7 +1,11 @@
 package tui
 
 import (
+	"fmt"
+	"os"
+	"os/exec"
 	"sort"
+	"strings"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -127,6 +131,9 @@ func (m AppModel) executeAction(action Action) (tea.Model, tea.Cmd, bool) {
 		return m.issueCommand(func(issueID string) error {
 			return commands.Sprint(m.ctx, m.wsSess, issueID)
 		})
+
+	case ActionView:
+		return m.executeView()
 	}
 
 	return m, nil, false
@@ -152,6 +159,51 @@ func (m AppModel) executeOpen() (tea.Model, tea.Cmd, bool) {
 		return notifyMsg{title: "Opened", message: issueKey}
 	}
 	return m, cmd, true
+}
+
+// executeView suspends the TUI and runs the workspace's configured viewer
+// (e.g. mdcat with kitty graphics) so rich content like inline images can
+// be displayed without a Bubble Tea render. Falls back to a notify when
+// no view_command is configured.
+func (m AppModel) executeView() (tea.Model, tea.Cmd, bool) {
+	issue := m.targetIssue()
+	if issue == nil {
+		return m, nil, false
+	}
+	if m.ws.ViewCommand == "" {
+		m.setNotify("No view_command configured")
+		return m, nil, true
+	}
+	process, err := buildViewProcess(m.ws.ViewCommand, issue.ID)
+	if err != nil {
+		m.setNotify("View failed: " + err.Error())
+		return m, nil, true
+	}
+	issueKey := issue.ID
+	return m, tea.ExecProcess(process, func(err error) tea.Msg {
+		if err != nil {
+			return notifyMsg{title: "View failed", message: err.Error()}
+		}
+		return notifyMsg{title: "Viewed", message: issueKey}
+	}), true
+}
+
+// buildViewProcess parses a view_command template (whitespace-separated
+// tokens, with {key} substituted) into an *exec.Cmd. Inherits stdio so
+// the viewer paints directly to the user's terminal.
+func buildViewProcess(template, issueKey string) (*exec.Cmd, error) {
+	tokens := strings.Fields(template)
+	if len(tokens) == 0 {
+		return nil, fmt.Errorf("empty view_command")
+	}
+	for i, tok := range tokens {
+		tokens[i] = strings.ReplaceAll(tok, "{key}", issueKey)
+	}
+	cmd := exec.Command(tokens[0], tokens[1:]...)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd, nil
 }
 
 func (m AppModel) executeFilterSwitch() (tea.Model, tea.Cmd, bool) {

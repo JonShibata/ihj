@@ -240,6 +240,8 @@ func (m *AppModel) resolveAction(msg tea.KeyPressMsg) Action {
 		return ActionWorkspace
 	case key.Matches(msg, keys.Sprint):
 		return ActionSprint
+	case key.Matches(msg, keys.View):
+		return ActionView
 	default:
 		return ActionNone
 	}

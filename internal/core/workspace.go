@@ -42,6 +42,12 @@ type Workspace struct {
 	// The keys are user-visible names; values are provider-specific query fragments.
 	Filters map[string]string `json:"filters"`
 
+	// ViewCommand, when set, runs an external program to view the issue
+	// in a richer form (e.g. an mdcat-based viewer that renders inline
+	// images via the kitty graphics protocol). The TUI suspends while it
+	// runs. {key} is substituted with the issue ID.
+	ViewCommand string `json:"viewCommand,omitempty"`
+
 	// CacheTTL is the duration for which cached data is considered fresh.
 	// Resolved at config load: workspace cache_ttl > global cache_ttl > DefaultCacheTTL.
 	CacheTTL time.Duration `json:"-"`
