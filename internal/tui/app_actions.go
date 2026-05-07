@@ -122,6 +122,11 @@ func (m AppModel) executeAction(action Action) (tea.Model, tea.Cmd, bool) {
 
 	case ActionWorkspace:
 		return m.executeWorkspaceSwitch()
+
+	case ActionSprint:
+		return m.issueCommand(func(issueID string) error {
+			return commands.Sprint(m.ctx, m.wsSess, issueID)
+		})
 	}
 
 	return m, nil, false

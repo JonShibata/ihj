@@ -26,6 +26,7 @@ type API interface {
 	AddComment(ctx context.Context, issueKey string, adfBody map[string]any) error
 	FetchActiveSprint(ctx context.Context, boardID int) (*sprint, error)
 	FetchNextFutureSprint(ctx context.Context, boardID int) (*sprint, error)
+	FetchSprints(ctx context.Context, boardID int, states []string) ([]sprint, error)
 	AddToSprint(ctx context.Context, sprintID int, issueKeys []string) error
 	MoveToBacklog(ctx context.Context, issueKeys []string) error
 	FetchIssue(ctx context.Context, issueKey string) (*issue, error)
@@ -182,6 +183,21 @@ func (c *Client) FetchNextFutureSprint(ctx context.Context, boardID int) (*sprin
 		}
 	}
 	return &best, nil
+}
+
+// FetchSprints returns sprints for a board filtered by state. states may be
+// any combination of "active", "future", "closed"; an empty slice returns
+// all sprints. Results are paginated by Jira; this collapses pages.
+func (c *Client) FetchSprints(ctx context.Context, boardID int, states []string) ([]sprint, error) {
+	path := fmt.Sprintf("/rest/agile/1.0/board/%d/sprint", boardID)
+	if len(states) > 0 {
+		path += "?state=" + strings.Join(states, ",")
+	}
+	var resp sprintList
+	if err := c.get(ctx, path, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Values, nil
 }
 
 func (c *Client) AddToSprint(ctx context.Context, sprintID int, issueKeys []string) error {

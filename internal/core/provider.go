@@ -56,6 +56,21 @@ type Provider interface {
 	TransitionsFor(ctx context.Context, id string) (current string, options []string, err error)
 }
 
+// Sprint is a backend-agnostic sprint descriptor returned by SprintLister.
+// State is "active", "future", or "closed" for Jira; other backends may
+// use their own vocabulary.
+type Sprint struct {
+	ID    int
+	Name  string
+	State string
+}
+
+// SprintLister is an optional capability — providers that support sprints
+// implement it. Callers type-assert and skip the action if absent.
+type SprintLister interface {
+	ListSprints(ctx context.Context, states []string) ([]Sprint, error)
+}
+
 // User represents an authenticated user across any backend.
 type User struct {
 	ID          string `json:"id"` // Backend-specific ID (accountId for Jira, login for GitHub)

@@ -56,6 +56,7 @@ When the detail pane is focused (via Tab or Enter), `Up`/`Down` scroll the detai
 | `Alt+X`  | Extract issue context for LLM      |
 | `Alt+F`  | Switch filter                      |
 | `Alt+W`  | Switch workspace                   |
+| `Alt+S`  | Assign to sprint                   |
 | `Alt+R`  | Refresh data                       |
 | `Alt+/`  | Show help overlay                  |
 
@@ -85,6 +86,7 @@ Single-character keys for actions and navigation:
 | `x`   | Extract issue context for LLM      |
 | `f`   | Switch filter                      |
 | `w`   | Switch workspace                   |
+| `s`   | Assign to sprint                   |
 | `r`   | Refresh data                       |
 | `/`   | Enter search mode                  |
 | `:`   | Enter command mode                 |
@@ -124,6 +126,6 @@ shortcuts:
   branch: "ctrl+b"
 ```
 
-Available actions: `refresh`, `filter`, `workspace`, `edit`, `new`, `transition`, `assign`, `comment`, `open`, `branch`, `extract`.
+Available actions: `refresh`, `filter`, `workspace`, `sprint`, `edit`, `new`, `transition`, `assign`, `comment`, `open`, `branch`, `extract`.
 
 Shortcuts must include a modifier prefix (`alt+`, `ctrl+`, `super+`, `hyper+`). Collisions with reserved bindings are rejected at config load.

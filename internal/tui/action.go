@@ -19,4 +19,5 @@ const (
 	ActionExtract
 	ActionNew
 	ActionWorkspace
+	ActionSprint
 )

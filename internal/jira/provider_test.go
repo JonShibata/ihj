@@ -1488,6 +1488,105 @@ func TestProvider_Update_LabelsArrayCustomField(t *testing.T) {
 	}
 }
 
+func TestProvider_Update_SprintByID(t *testing.T) {
+	var addedSprintID int
+	var addedKeys []string
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.Contains(r.URL.Path, "createmeta"):
+			w.Header().Set("Content-Type", "application/json")
+			w.Write(createMetaFieldsJSON(priorityMetaField))
+		case strings.HasPrefix(r.URL.Path, "/rest/agile/1.0/sprint/") && r.Method == "POST":
+			parts := strings.Split(r.URL.Path, "/")
+			fmt.Sscanf(parts[len(parts)-2], "%d", &addedSprintID)
+			var body struct {
+				Issues []string `json:"issues"`
+			}
+			json.NewDecoder(r.Body).Decode(&body)
+			addedKeys = body.Issues
+			w.WriteHeader(204)
+		default:
+			w.WriteHeader(404)
+		}
+	})
+
+	srv := httptest.NewServer(handler)
+	t.Cleanup(srv.Close)
+
+	ws := testWorkspace(srv.URL)
+	ws.ServerAlias = "test-srv"
+	jira.HydrateWorkspace(ws)
+
+	client := jira.New(srv.URL, "test-token")
+	provider, err := jira.NewProvider(client, ws, t.TempDir())
+	if err != nil {
+		t.Fatalf("NewProvider: %v", err)
+	}
+
+	err = provider.Update(context.Background(), "FOO-1", &core.Changes{
+		Fields: map[string]any{"sprint": "42"},
+	})
+	if err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+	if addedSprintID != 42 {
+		t.Errorf("AddToSprint id = %d; want 42", addedSprintID)
+	}
+	if len(addedKeys) != 1 || addedKeys[0] != "FOO-1" {
+		t.Errorf("AddToSprint keys = %v; want [FOO-1]", addedKeys)
+	}
+}
+
+func TestProvider_ListSprints(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.Contains(r.URL.Path, "createmeta"):
+			w.Header().Set("Content-Type", "application/json")
+			w.Write(createMetaFieldsJSON(priorityMetaField))
+		case strings.Contains(r.URL.Path, "/sprint"):
+			if r.URL.Query().Get("state") != "active,future" {
+				t.Errorf("state query = %q; want active,future", r.URL.Query().Get("state"))
+			}
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"values":[
+				{"id":11,"name":"Sprint 11","state":"active"},
+				{"id":12,"name":"Sprint 12","state":"future"}
+			]}`)
+		default:
+			w.WriteHeader(404)
+		}
+	})
+
+	srv := httptest.NewServer(handler)
+	t.Cleanup(srv.Close)
+
+	ws := testWorkspace(srv.URL)
+	ws.ServerAlias = "test-srv"
+	jira.HydrateWorkspace(ws)
+
+	client := jira.New(srv.URL, "test-token")
+	provider, err := jira.NewProvider(client, ws, t.TempDir())
+	if err != nil {
+		t.Fatalf("NewProvider: %v", err)
+	}
+
+	lister, ok := any(provider).(core.SprintLister)
+	if !ok {
+		t.Fatal("Provider does not implement SprintLister")
+	}
+	sprints, err := lister.ListSprints(context.Background(), []string{"active", "future"})
+	if err != nil {
+		t.Fatalf("ListSprints: %v", err)
+	}
+	if len(sprints) != 2 {
+		t.Fatalf("got %d sprints; want 2", len(sprints))
+	}
+	if sprints[0].ID != 11 || sprints[1].State != "future" {
+		t.Errorf("unexpected sprints: %+v", sprints)
+	}
+}
+
 func TestHydrateWorkspace(t *testing.T) {
 	ws := &core.Workspace{
 		Slug: "eng",

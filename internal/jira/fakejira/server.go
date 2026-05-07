@@ -393,8 +393,16 @@ func (s *Server) handleBoardConfig(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleBoardSprints(w http.ResponseWriter, r *http.Request) {
 	bid, _ := strconv.Atoi(r.PathValue("id"))
-	state := r.URL.Query().Get("state")
-	sprints := s.State.SprintsByState(bid, state)
+	stateParam := r.URL.Query().Get("state")
+	var sprints []*entSprint
+	if stateParam == "" {
+		sprints = s.State.SprintsByState(bid, "")
+	} else {
+		// Real Jira accepts a comma-separated state list (e.g. "active,future").
+		for _, st := range strings.Split(stateParam, ",") {
+			sprints = append(sprints, s.State.SprintsByState(bid, st)...)
+		}
+	}
 	out := wireSprintList{Values: make([]wireSprintRef, 0, len(sprints))}
 	for _, sp := range sprints {
 		out.Values = append(out.Values, wireSprintRef{ID: sp.ID, Name: sp.Name, State: sp.State})

@@ -202,7 +202,30 @@ func (p *Provider) Update(ctx context.Context, id string, changes *core.Changes)
 		}
 	}
 
+	if tx.sprintByID > 0 {
+		if err := p.client.AddToSprint(ctx, tx.sprintByID, []string{id}); err != nil {
+			return fmt.Errorf("adding %s to sprint %d: %w", id, tx.sprintByID, err)
+		}
+	}
+
 	return nil
+}
+
+// ListSprints implements core.SprintLister. Returns sprints for the
+// workspace's board filtered by state. An empty states slice returns all.
+func (p *Provider) ListSprints(ctx context.Context, states []string) ([]core.Sprint, error) {
+	if p.cfg == nil || p.cfg.BoardID == 0 {
+		return nil, fmt.Errorf("workspace has no board_id configured")
+	}
+	sprints, err := p.client.FetchSprints(ctx, p.cfg.BoardID, states)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]core.Sprint, len(sprints))
+	for i, s := range sprints {
+		out[i] = core.Sprint{ID: s.ID, Name: s.Name, State: s.State}
+	}
+	return out, nil
 }
 
 // Comment adds a comment to a Jira issue.

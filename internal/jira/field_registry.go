@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/mikecsmith/ihj/internal/core"
@@ -306,8 +307,17 @@ func (wk wellKnownFields) TranslateFields(p *Provider, ctx context.Context, src 
 	for k, v := range src {
 		switch k {
 		case "sprint":
-			if s, ok := v.(string); ok && (s == "active" || s == "future" || s == "none") {
+			s, ok := v.(string)
+			if !ok {
+				continue
+			}
+			switch s {
+			case "active", "future", "none":
 				tx.sprintTarget = s
+			default:
+				if id, err := strconv.Atoi(s); err == nil && id > 0 {
+					tx.sprintByID = id
+				}
 			}
 		case "priority":
 			if s, ok := v.(string); ok && s != "" {
@@ -440,6 +450,7 @@ func (wk wellKnownFields) ExtractFields(f *issueFields) (fields map[string]any, 
 type translatedFields struct {
 	fields       map[string]any // Jira field-key → API value
 	sprintTarget string         // "active", "future", "none", or ""
+	sprintByID   int            // explicit sprint ID (set when value parses as int)
 	assignUser   *string        // accountId to assign; nil = no change, "" = unassign
 }
 
