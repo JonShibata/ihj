@@ -50,15 +50,16 @@ type rawServer struct {
 }
 
 type rawWorkspace struct {
-	Server   string            `yaml:"server"` // Server alias (references servers map)
-	Name     string            `yaml:"name"`
-	CacheTTL string            `yaml:"cache_ttl"`
-	Guidance string            `yaml:"guidance"` // Removed — detected and rejected with a migration hint.
-	Extract  rawExtractConfig  `yaml:"extract"`
-	Fields   map[string]any    `yaml:"fields,omitempty"` // Workspace-wide field aliases (alias → provider field ID).
-	Types    []rawTypeConfig   `yaml:"types"`
-	Statuses []rawStatusConfig `yaml:"statuses"`
-	Filters  map[string]string `yaml:"filters"`
+	Server     string              `yaml:"server"` // Server alias (references servers map)
+	Name       string              `yaml:"name"`
+	CacheTTL   string              `yaml:"cache_ttl"`
+	Guidance   string              `yaml:"guidance"` // Removed — detected and rejected with a migration hint.
+	Extract    rawExtractConfig    `yaml:"extract"`
+	Fields     map[string]any      `yaml:"fields,omitempty"` // Workspace-wide field aliases (alias → provider field ID).
+	Types      []rawTypeConfig     `yaml:"types"`
+	Statuses   []rawStatusConfig   `yaml:"statuses"`
+	Priorities []rawPriorityConfig `yaml:"priorities,omitempty"` // Optional sort order; defaults to standard Jira order.
+	Filters    map[string]string   `yaml:"filters"`
 }
 
 type rawExtractConfig struct {
@@ -84,6 +85,11 @@ type rawStatusConfig struct {
 	Name  string `yaml:"name"`
 	Order int    `yaml:"order"`
 	Color string `yaml:"color"`
+}
+
+type rawPriorityConfig struct {
+	Name  string `yaml:"name"`
+	Order int    `yaml:"order"`
 }
 
 // uiCaps holds UI-implementation settings resolved from config.
@@ -222,6 +228,17 @@ func loadConfig(path string) (configResult, error) {
 			}
 		}
 
+		var priorities []core.PriorityConfig
+		var priorityOrderMap map[string]int
+		if len(rws.Priorities) > 0 {
+			priorities = make([]core.PriorityConfig, len(rws.Priorities))
+			priorityOrderMap = make(map[string]int, len(rws.Priorities))
+			for i, p := range rws.Priorities {
+				priorities[i] = core.PriorityConfig{Name: p.Name, Order: p.Order}
+				priorityOrderMap[strings.ToLower(p.Name)] = p.Order
+			}
+		}
+
 		// Resolve cache TTL: workspace > global > default.
 		cacheTTL := globalCacheTTL
 		if rws.CacheTTL != "" {
@@ -245,20 +262,22 @@ func loadConfig(path string) (configResult, error) {
 		}
 
 		workspaces[slug] = &core.Workspace{
-			Slug:            slug,
-			Name:            rws.Name,
-			Provider:        srv.Provider,
-			ServerAlias:     rws.Server,
-			BaseURL:         srv.URL,
-			CacheTTL:        cacheTTL,
-			ExtractGuidance: extractGuidance,
-			Types:           types,
-			Statuses:        statuses,
-			Filters:         rws.Filters,
-			FieldAliases:    parseIntMap(rws.Fields),
-			StatusOrderMap:  statusOrderMap,
-			TypeOrderMap:    typeOrderMap,
-			ProviderConfig:  providerCfg,
+			Slug:             slug,
+			Name:             rws.Name,
+			Provider:         srv.Provider,
+			ServerAlias:      rws.Server,
+			BaseURL:          srv.URL,
+			CacheTTL:         cacheTTL,
+			ExtractGuidance:  extractGuidance,
+			Types:            types,
+			Statuses:         statuses,
+			Priorities:       priorities,
+			Filters:          rws.Filters,
+			FieldAliases:     parseIntMap(rws.Fields),
+			StatusOrderMap:   statusOrderMap,
+			TypeOrderMap:     typeOrderMap,
+			PriorityOrderMap: priorityOrderMap,
+			ProviderConfig:   providerCfg,
 		}
 	}
 

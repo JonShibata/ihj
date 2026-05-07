@@ -52,6 +52,7 @@ type ListModel struct {
 	styles        *terminal.Styles
 	fieldDefs     core.FieldDefs
 	statusOrder   map[string]core.StatusOrderEntry
+	priorityOrder map[string]int
 	typeOrder     map[string]core.TypeOrderEntry
 	width, height int
 }
@@ -61,14 +62,15 @@ func NewListModel(
 	registry map[string]*core.WorkItem,
 	styles *terminal.Styles,
 	statusOrder map[string]core.StatusOrderEntry,
+	priorityOrder map[string]int,
 	typeOrder map[string]core.TypeOrderEntry,
 	fieldDefs core.FieldDefs,
 ) ListModel {
 	roots := core.Roots(registry)
-	core.SortItems(roots, statusOrder, typeOrder)
+	core.SortItems(roots, statusOrder, priorityOrder, typeOrder)
 
 	var items []listItem
-	flattenTree(roots, 0, nil, nil, &items, statusOrder, typeOrder)
+	flattenTree(roots, 0, nil, nil, &items, statusOrder, priorityOrder, typeOrder)
 
 	ti := textinput.New()
 	ti.Placeholder = ""
@@ -77,14 +79,15 @@ func NewListModel(
 	ti.Focus()
 
 	lm := ListModel{
-		allItems:    items,
-		filtered:    items,
-		matchIdxs:   make(map[int][]int),
-		search:      ti,
-		styles:      styles,
-		fieldDefs:   fieldDefs,
-		statusOrder: statusOrder,
-		typeOrder:   typeOrder,
+		allItems:      items,
+		filtered:      items,
+		matchIdxs:     make(map[int][]int),
+		search:        ti,
+		styles:        styles,
+		fieldDefs:     fieldDefs,
+		statusOrder:   statusOrder,
+		priorityOrder: priorityOrder,
+		typeOrder:     typeOrder,
 	}
 	lm.updateMaxIDW()
 	lm.updatePrompt()
@@ -113,10 +116,10 @@ func (m *ListModel) Rebuild(registry map[string]*core.WorkItem) {
 	}
 
 	roots := core.Roots(registry)
-	core.SortItems(roots, m.statusOrder, m.typeOrder)
+	core.SortItems(roots, m.statusOrder, m.priorityOrder, m.typeOrder)
 
 	var items []listItem
-	flattenTree(roots, 0, nil, nil, &items, m.statusOrder, m.typeOrder)
+	flattenTree(roots, 0, nil, nil, &items, m.statusOrder, m.priorityOrder, m.typeOrder)
 	m.allItems = items
 	m.updateMaxIDW()
 	m.applyFilter()
@@ -136,7 +139,8 @@ func (m *ListModel) Rebuild(registry map[string]*core.WorkItem) {
 // glyph prefixes. ancestorTypes tracks the issue type at each depth for coloring.
 func flattenTree(
 	items []*core.WorkItem, depth int, ancestors []bool, ancestorTypes []string,
-	out *[]listItem, sw map[string]core.StatusOrderEntry, to map[string]core.TypeOrderEntry,
+	out *[]listItem, sw map[string]core.StatusOrderEntry,
+	po map[string]int, to map[string]core.TypeOrderEntry,
 ) {
 	for i, v := range items {
 		isLast := i == len(items)-1
@@ -163,8 +167,8 @@ func flattenTree(
 		if len(v.Children) > 0 {
 			children := make([]*core.WorkItem, len(v.Children))
 			copy(children, v.Children)
-			core.SortItems(children, sw, to)
-			flattenTree(children, depth+1, currentAncestors, currentAncestorTypes, out, sw, to)
+			core.SortItems(children, sw, po, to)
+			flattenTree(children, depth+1, currentAncestors, currentAncestorTypes, out, sw, po, to)
 		}
 	}
 }

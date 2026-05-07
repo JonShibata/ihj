@@ -21,7 +21,7 @@ func testBlackboxListModel(registry map[string]*core.WorkItem) tui.ListModel {
 		"10": {Order: 10, Color: "purple", HasChildren: true},
 		"20": {Order: 20, Color: "blue"},
 	}
-	lm := tui.NewListModel(registry, styles, sw, to, testutil.TestFieldDefs())
+	lm := tui.NewListModel(registry, styles, sw, nil, to, testutil.TestFieldDefs())
 	lm.SetSize(120, 40)
 	return lm
 }

@@ -57,10 +57,21 @@ type Workspace struct {
 	// JQL variable interpolation and createmeta field discovery.
 	FieldAliases map[string]int `json:"-"`
 
+	// Priorities defines the priority sort order. Optional — when nil/empty,
+	// SortItems falls back to the standard Jira ordering.
+	Priorities []PriorityConfig `json:"priorities,omitempty"`
+
 	// Internal — not serialized for frontend.
-	StatusOrderMap map[string]StatusOrderEntry `json:"-"`
-	TypeOrderMap   map[string]TypeOrderEntry   `json:"-"`
-	ProviderConfig any                         `json:"-"`
+	StatusOrderMap   map[string]StatusOrderEntry `json:"-"`
+	TypeOrderMap     map[string]TypeOrderEntry   `json:"-"`
+	PriorityOrderMap map[string]int              `json:"-"`
+	ProviderConfig   any                         `json:"-"`
+}
+
+// PriorityConfig overrides the priority sort for a workspace.
+type PriorityConfig struct {
+	Name  string `json:"name"`
+	Order int    `json:"order"`
 }
 
 // StatusConfig describes a work item status within a workspace.

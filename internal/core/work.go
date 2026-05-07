@@ -197,13 +197,33 @@ func Roots(reg map[string]*WorkItem) []*WorkItem {
 	return roots
 }
 
-// SortItems sorts work items by status weight, type order, then ID.
-func SortItems(items []*WorkItem, statusOrder map[string]StatusOrderEntry, typeOrder map[string]TypeOrderEntry) {
+// defaultPriorityOrder is the canonical Jira priority sort. Used when a
+// workspace doesn't supply its own priorities config.
+var defaultPriorityOrder = map[string]int{
+	"highest": 1, "high": 2, "medium": 3, "low": 4, "lowest": 5,
+}
+
+// SortItems sorts work items by status weight, then priority, then type
+// order, then ID. priorityOrder may be nil — defaultPriorityOrder is used
+// in that case so the standard Jira priorities sort sensibly out of the box.
+func SortItems(
+	items []*WorkItem,
+	statusOrder map[string]StatusOrderEntry,
+	priorityOrder map[string]int,
+	typeOrder map[string]TypeOrderEntry,
+) {
+	if priorityOrder == nil {
+		priorityOrder = defaultPriorityOrder
+	}
 	sort.Slice(items, func(i, j int) bool {
 		a, b := items[i], items[j]
 		aw, bw := statusWeightOf(a.Status, statusOrder), statusWeightOf(b.Status, statusOrder)
 		if aw != bw {
 			return aw < bw
+		}
+		ap, bp := priorityWeightOf(a, priorityOrder), priorityWeightOf(b, priorityOrder)
+		if ap != bp {
+			return ap < bp
 		}
 		ao, bo := typeOrderOf(a.Type, typeOrder), typeOrderOf(b.Type, typeOrder)
 		if ao != bo {
@@ -211,6 +231,13 @@ func SortItems(items []*WorkItem, statusOrder map[string]StatusOrderEntry, typeO
 		}
 		return compareIDsNatural(a.ID, b.ID)
 	})
+}
+
+func priorityWeightOf(w *WorkItem, m map[string]int) int {
+	if v, ok := m[strings.ToLower(w.StringField("priority"))]; ok {
+		return v
+	}
+	return 99
 }
 
 // compareIDsNatural orders IDs so digit runs compare as numbers, making
