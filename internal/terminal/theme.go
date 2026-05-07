@@ -52,11 +52,18 @@ type Theme struct {
 // matching the original Python TUI's use of \033[3Xm sequences.
 func DefaultTheme() *Theme {
 	return &Theme{
-		Accent:  lipgloss.Color("4"), // Blue
-		Muted:   lipgloss.Color("8"), // Bright black / gray
+		Accent: lipgloss.Color("4"), // Blue
+		// Muted/Text were color 8 ("bright black") and 7 ("white") — both
+		// render as near-invisible light shades on light terminal
+		// backgrounds. Use ANSI 240 (medium-dark grey) for muted, and
+		// leave Text unset so the terminal's default foreground is used.
+		// Background colors stay on 0/8 so dark borders look right;
+		// foreground colors that need to read on either background pick
+		// from the 256-color palette directly.
+		Muted:   lipgloss.Color("240"),
 		Surface: lipgloss.Color("0"), // Black background
 		Overlay: lipgloss.Color("8"), // Gray background
-		Text:    lipgloss.Color("7"), // White / default
+		Text:    lipgloss.Color(""),  // Empty = use terminal default foreground.
 		Board:   lipgloss.Color("5"), // Magenta — title anchor (matches original)
 
 		Success: lipgloss.Color("2"), // Green
@@ -141,7 +148,12 @@ type Styles struct {
 
 // NewStyles builds the complete style set from a theme.
 func NewStyles(t *Theme, ws *core.Workspace, contentTheme string) *Styles {
-	dim := lipgloss.NewStyle().Faint(true)
+	// Faint(true) collapses to near-invisible light grey on light terminal
+	// backgrounds. Use an explicit medium-dark grey (ANSI 240) instead so
+	// help text and other secondary content stay legible on both white
+	// and dark themes — matches the dim-placeholder style already used in
+	// the detail metadata grid.
+	dim := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(240))
 	accent := lipgloss.NewStyle().Foreground(t.Accent)
 
 	// Build dynamic color maps from workspace config.
@@ -170,12 +182,15 @@ func NewStyles(t *Theme, ws *core.Workspace, contentTheme string) *Styles {
 		StatusBarKey: lipgloss.NewStyle().
 			Foreground(t.Accent).Bold(true),
 		StatusBarValue: dim,
-		HelpBar: lipgloss.NewStyle().
-			Faint(true),
+		// HelpBar wraps the whole help line; if it sets Faint, it overrides
+		// the inner ActionKey/ActionDesc colors and erases everything on
+		// light backgrounds. Leave the wrapper bare and let the inner
+		// styles drive the colors.
+		HelpBar: lipgloss.NewStyle(),
 
 		// List.
 		IssueKey:     lipgloss.NewStyle().Bold(true),
-		IssueKeyDim:  lipgloss.NewStyle().Faint(true),
+		IssueKeyDim:  dim,
 		Summary:      lipgloss.NewStyle(),
 		SummaryChild: lipgloss.NewStyle(),
 		ChildCount:   dim,
