@@ -17,6 +17,13 @@ type MockUI struct {
 	SelectErr     error
 	SelectCalls   []string
 
+	// SelectMulti behavior. SelectMultiReturns (when non-empty) is consumed
+	// in order; SelectMultiReturn is the fallback once exhausted.
+	SelectMultiReturn  []int
+	SelectMultiReturns [][]int
+	SelectMultiErr     error
+	SelectMultiCalls   []string
+
 	// Confirm behavior.
 	ConfirmReturn bool
 	ConfirmErr    error
@@ -64,6 +71,16 @@ func (m *MockUI) Select(title string, options []string) (int, error) {
 		return v, m.SelectErr
 	}
 	return m.SelectReturn, m.SelectErr
+}
+
+func (m *MockUI) SelectMulti(title string, options []string) ([]int, error) {
+	m.SelectMultiCalls = append(m.SelectMultiCalls, title)
+	if len(m.SelectMultiReturns) > 0 {
+		v := m.SelectMultiReturns[0]
+		m.SelectMultiReturns = m.SelectMultiReturns[1:]
+		return v, m.SelectMultiErr
+	}
+	return m.SelectMultiReturn, m.SelectMultiErr
 }
 
 func (m *MockUI) Confirm(prompt string) (bool, error) {

@@ -6,6 +6,7 @@ import (
 
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/textarea"
+	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
@@ -37,17 +38,20 @@ const (
 type PopupMode int
 
 const (
-	PopupNone   PopupMode = iota
-	PopupSelect           // Choose from a list of options.
-	PopupInput            // Free-text input (comments, extract prompts).
+	PopupNone        PopupMode = iota
+	PopupSelect                // Choose from a list of options.
+	PopupInput                 // Free-text input (comments, extract prompts).
+	PopupMultiSelect           // Choose any number of options from a filterable list.
 )
 
 // PopupResult is sent when the user confirms or cancels a popup.
 type PopupResult struct {
-	ID       string // Identifies which action triggered the popup.
-	Index    int    // Selected index (PopupSelect), -1 if cancelled.
-	Value    string // The exact string selected from the options list.
-	Text     string // Input text (PopupInput), empty if cancelled.
+	ID       string   // Identifies which action triggered the popup.
+	Index    int      // Selected index (PopupSelect), -1 if cancelled.
+	Value    string   // The exact string selected from the options list.
+	Indices  []int    // Selected indices (PopupMultiSelect).
+	Values   []string // Selected option strings (PopupMultiSelect).
+	Text     string   // Input text (PopupInput), empty if cancelled.
 	Canceled bool
 }
 
@@ -67,6 +71,11 @@ type PopupModel struct {
 
 	input textarea.Model // For PopupInput.
 
+	// Multi-select state (PopupMultiSelect only).
+	multiSelected map[int]bool   // keyed on original index in p.labels
+	visibleOrder  []int          // original-index list after filter
+	filter        textinput.Model
+
 	// pendingHint accumulates the first character of a multi-char hint
 	// label while waiting for the second keypress. Reset whenever the
 	// popup processes any non-hint key.
@@ -84,11 +93,55 @@ func NewPopupModel(styles *terminal.Styles, keys terminal.KeyMap) PopupModel {
 	textArea := textarea.New()
 	textArea.ShowLineNumbers = false
 	textArea.CharLimit = popupInputCharLimit
+	textArea.SetStyles(popupTextareaStyles(styles.Theme()))
+
+	filter := textinput.New()
+	filter.Prompt = "/ "
+	filter.Placeholder = "type to filter"
+	filter.CharLimit = 120
+
 	return PopupModel{
 		mode:   PopupNone,
 		styles: styles,
 		keys:   keys,
 		input:  textArea,
+		filter: filter,
+	}
+}
+
+// popupTextareaStyles overrides the bubbles/textarea defaults so the
+// input is readable on both light and dark terminal backgrounds. The
+// stock DefaultDarkStyles paints the cursor line with background color 0
+// (black) and leaves the text style unset so it inherits the terminal's
+// default foreground — on a light terminal that's near-black on black
+// (i.e. invisible). We drop the cursor-line background entirely (the
+// popup's own background shows through) and route the remaining colours
+// through the theme's mid-tone palette so neither extreme breaks.
+func popupTextareaStyles(theme *terminal.Theme) textarea.Styles {
+	noBg := lipgloss.NewStyle()
+	muted := lipgloss.NewStyle().Foreground(theme.Muted)
+	prompt := lipgloss.NewStyle().Foreground(theme.Accent)
+
+	state := func() textarea.StyleState {
+		return textarea.StyleState{
+			Base:             lipgloss.NewStyle(),
+			Text:             lipgloss.NewStyle(),
+			LineNumber:       muted,
+			CursorLineNumber: muted,
+			CursorLine:       noBg,
+			EndOfBuffer:      muted,
+			Placeholder:      muted,
+			Prompt:           prompt,
+		}
+	}
+	return textarea.Styles{
+		Focused: state(),
+		Blurred: state(),
+		Cursor: textarea.CursorStyle{
+			Color: theme.Accent,
+			Shape: tea.CursorBlock,
+			Blink: true,
+		},
 	}
 }
 
@@ -125,6 +178,48 @@ func (p *PopupModel) ShowSelectWithActive(id, title string, labels []string, val
 	p.pendingHint = ""
 }
 
+// ShowMultiSelect opens a multi-selection popup with a substring filter.
+// Cursor and visible window operate over the filter-narrowed list; the
+// returned PopupResult.Indices reference the original options slice.
+func (p *PopupModel) ShowMultiSelect(id, title string, options []string) {
+	p.mode = PopupMultiSelect
+	p.id = id
+	p.title = title
+	p.labels = options
+	p.values = nil
+	p.activeIndex = noActiveItem
+	p.cursor = 0
+	p.pendingHint = ""
+	p.multiSelected = make(map[int]bool)
+	p.filter.Reset()
+	p.filter.Focus()
+	p.rebuildVisible()
+}
+
+// rebuildVisible recomputes visibleOrder from the current filter query.
+// Substring match is case-insensitive. Cursor is clamped into the new range.
+func (p *PopupModel) rebuildVisible() {
+	q := strings.ToLower(strings.TrimSpace(p.filter.Value()))
+	p.visibleOrder = p.visibleOrder[:0]
+	if q == "" {
+		for i := range p.labels {
+			p.visibleOrder = append(p.visibleOrder, i)
+		}
+	} else {
+		for i, l := range p.labels {
+			if strings.Contains(strings.ToLower(l), q) {
+				p.visibleOrder = append(p.visibleOrder, i)
+			}
+		}
+	}
+	if p.cursor >= len(p.visibleOrder) {
+		p.cursor = len(p.visibleOrder) - 1
+	}
+	if p.cursor < 0 {
+		p.cursor = 0
+	}
+}
+
 // ShowInput opens a text input popup.
 func (p *PopupModel) ShowInput(id, title, placeholder string) {
 	p.mode = PopupInput
@@ -145,6 +240,9 @@ func (p *PopupModel) SetSize(width, height int) {
 func (p *PopupModel) Close() {
 	p.mode = PopupNone
 	p.input.Blur()
+	p.filter.Blur()
+	p.multiSelected = nil
+	p.visibleOrder = nil
 }
 
 // ── Update handlers ─────────────────────────────────────────────
@@ -158,9 +256,78 @@ func (p *PopupModel) Update(msg tea.Msg) (tea.Cmd, *PopupResult) {
 			return p.updateSelect(msg)
 		case PopupInput:
 			return p.updateInput(msg)
+		case PopupMultiSelect:
+			return p.updateMultiSelect(msg)
 		}
 	}
 	return nil, nil
+}
+
+func (p *PopupModel) updateMultiSelect(msg tea.KeyPressMsg) (tea.Cmd, *PopupResult) {
+	keys := p.keys
+
+	switch {
+	case key.Matches(msg, keys.Cancel), key.Matches(msg, keys.Quit):
+		result := &PopupResult{ID: p.id, Index: -1, Canceled: true}
+		p.Close()
+		return nil, result
+	case key.Matches(msg, keys.Submit), key.Matches(msg, keys.Focus):
+		// Commit selected indices in original order.
+		var idxs []int
+		var vals []string
+		for i, l := range p.labels {
+			if p.multiSelected[i] {
+				idxs = append(idxs, i)
+				vals = append(vals, l)
+			}
+		}
+		result := &PopupResult{ID: p.id, Indices: idxs, Values: vals}
+		p.Close()
+		return nil, result
+	case key.Matches(msg, keys.Up):
+		if p.cursor > 0 {
+			p.cursor--
+		}
+		return nil, nil
+	case key.Matches(msg, keys.Down):
+		if p.cursor < len(p.visibleOrder)-1 {
+			p.cursor++
+		}
+		return nil, nil
+	case key.Matches(msg, keys.Home):
+		p.cursor = 0
+		return nil, nil
+	case key.Matches(msg, keys.End):
+		p.cursor = len(p.visibleOrder) - 1
+		if p.cursor < 0 {
+			p.cursor = 0
+		}
+		return nil, nil
+	}
+
+	// Space toggles the highlighted entry. tea reports a Space keypress
+	// with Code=KeySpace and String()=="space"; the textinput would
+	// otherwise consume it as a literal " " character in the filter.
+	if msg.Code == tea.KeySpace {
+		if p.cursor >= 0 && p.cursor < len(p.visibleOrder) {
+			origIdx := p.visibleOrder[p.cursor]
+			if p.multiSelected[origIdx] {
+				delete(p.multiSelected, origIdx)
+			} else {
+				p.multiSelected[origIdx] = true
+			}
+		}
+		return nil, nil
+	}
+
+	// Everything else feeds the filter input.
+	prev := p.filter.Value()
+	var cmd tea.Cmd
+	p.filter, cmd = p.filter.Update(msg)
+	if p.filter.Value() != prev {
+		p.rebuildVisible()
+	}
+	return cmd, nil
 }
 
 func (p *PopupModel) updateSelect(msg tea.KeyPressMsg) (tea.Cmd, *PopupResult) {
@@ -249,6 +416,16 @@ func (p *PopupModel) selectedValue(idx int) string {
 func (p *PopupModel) updateInput(msg tea.KeyPressMsg) (tea.Cmd, *PopupResult) {
 	keys := p.keys
 
+	// Plain Enter submits (chat-style); Shift+Enter inserts a newline.
+	// Alt+Enter / Ctrl+S still work via the keys.Submit binding for muscle
+	// memory.
+	if msg.Code == tea.KeyEnter && msg.Mod == 0 {
+		text := strings.TrimSpace(p.input.Value())
+		result := &PopupResult{ID: p.id, Text: text, Canceled: text == ""}
+		p.Close()
+		return nil, result
+	}
+
 	switch {
 	case key.Matches(msg, keys.Cancel), key.Matches(msg, keys.Quit):
 		result := &PopupResult{ID: p.id, Canceled: true}
@@ -290,6 +467,8 @@ func (p *PopupModel) View() string {
 		body = p.renderSelect()
 	case PopupInput:
 		body = p.renderInput(popupWidth)
+	case PopupMultiSelect:
+		body = p.renderMultiSelect(popupWidth)
 	}
 
 	boxStyle := lipgloss.NewStyle().
@@ -365,6 +544,63 @@ func (p *PopupModel) renderSelect() string {
 	return buf.String()
 }
 
+func (p *PopupModel) renderMultiSelect(popupWidth int) string {
+	theme := p.styles.Theme()
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(theme.Accent)
+	selectedStyle := lipgloss.NewStyle().Bold(true).Foreground(theme.Info)
+	normalStyle := lipgloss.NewStyle().Foreground(theme.Text)
+	dimStyle := lipgloss.NewStyle().Foreground(theme.Muted)
+	hintStyle := lipgloss.NewStyle().Foreground(theme.Muted).Italic(true)
+
+	innerWidth := max(popupWidth-popupBorderPadding, popupMinInnerWidth)
+	p.filter.SetWidth(innerWidth)
+
+	var buf strings.Builder
+	checkedCount := len(p.multiSelected) // sparse-true map: counts only true keys
+	header := p.title
+	if checkedCount > 0 {
+		header = fmt.Sprintf("%s  (%d selected)", p.title, checkedCount)
+	}
+	buf.WriteString(titleStyle.Render(header) + "\n")
+	buf.WriteString(p.filter.View() + "\n\n")
+
+	if len(p.visibleOrder) == 0 {
+		buf.WriteString(dimStyle.Render("  no matches") + "\n")
+	} else {
+		maxVisible := max(p.height-selectViewportMargin-2, selectMinVisibleItems)
+		start, end := CalculateWindow(p.cursor, len(p.visibleOrder), maxVisible)
+
+		if start > 0 {
+			buf.WriteString(dimStyle.Render("  "+core.GlyphArrowUp+"  ...") + "\n")
+		}
+		for i := start; i < end; i++ {
+			origIdx := p.visibleOrder[i]
+			option := p.labels[origIdx]
+			prefix := "  "
+			style := normalStyle
+			if i == p.cursor {
+				prefix = core.GlyphTriangle + " "
+				style = selectedStyle
+			}
+			check := "[ ]"
+			if p.multiSelected[origIdx] {
+				check = "[x]"
+			}
+			buf.WriteString(prefix + dimStyle.Render(check) + " " + style.Render(option) + "\n")
+		}
+		if end < len(p.visibleOrder) {
+			buf.WriteString(dimStyle.Render("  "+core.GlyphArrowDown+"  ...") + "\n")
+		}
+	}
+
+	buf.WriteString("\n" + hintStyle.Render(
+		core.GlyphArrowUp+core.GlyphArrowDown+" Navigate "+
+			core.GlyphDot+" Space Toggle "+
+			core.GlyphDot+" Enter Confirm "+
+			core.GlyphDot+" Esc Cancel"))
+	return buf.String()
+}
+
 func (p *PopupModel) renderInput(popupWidth int) string {
 	theme := p.styles.Theme()
 	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(theme.Accent)
@@ -379,10 +615,10 @@ func (p *PopupModel) renderInput(popupWidth int) string {
 	buf.WriteString(p.input.View() + "\n\n")
 
 	keys := p.keys
-	hint := fmt.Sprintf("%s %s "+core.GlyphDot+" %s %s",
-		keys.Submit.Help().Key, keys.Submit.Help().Desc,
+	hint := fmt.Sprintf("Enter Submit "+core.GlyphDot+" Shift+Enter Newline "+core.GlyphDot+" %s %s",
 		keys.Cancel.Help().Key, keys.Cancel.Help().Desc,
 	)
+	_ = keys.Submit // muscle-memory binding still works
 	buf.WriteString(hintStyle.Render(hint))
 	return buf.String()
 }

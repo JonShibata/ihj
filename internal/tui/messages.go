@@ -42,6 +42,11 @@ type bridgeSelectMsg struct {
 	options []string
 }
 
+type bridgeMultiSelectMsg struct {
+	title   string
+	options []string
+}
+
 type bridgeConfirmMsg struct {
 	prompt string
 }

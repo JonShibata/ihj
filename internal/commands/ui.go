@@ -25,6 +25,13 @@ type UI interface {
 	// Returns -1 if the user cancels.
 	Select(title string, options []string) (int, error)
 
+	// SelectMulti presents a filterable list of options and returns the
+	// indices the user checked. Returns nil + nil error on cancel. UIs
+	// should support type-to-filter narrowing — the option count can be
+	// large (project versions, tags) and pure cursor scrolling doesn't
+	// scale.
+	SelectMulti(title string, options []string) ([]int, error)
+
 	// Confirm asks a yes/no question. Returns true for yes.
 	Confirm(prompt string) (bool, error)
 

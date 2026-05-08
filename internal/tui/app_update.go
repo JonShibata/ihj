@@ -70,6 +70,11 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.ui.Emit(EventPopupSelect, "title", msg.title)
 		return m, nil
 
+	case bridgeMultiSelectMsg:
+		m.popup.ShowMultiSelect("bridge-multi", msg.title, msg.options)
+		m.ui.Emit(EventPopupSelect, "title", msg.title)
+		return m, nil
+
 	case bridgeConfirmMsg:
 		m.popup.ShowSelect("bridge-confirm", msg.prompt, []string{"Yes", "No"})
 		m.ui.Emit(EventPopupConfirm, "title", msg.prompt)

@@ -58,11 +58,12 @@ type BubbleTeaUI struct {
 	// tests allocate a buffered channel to observe behavior.
 	Events chan UIEvent
 
-	mu        sync.Mutex
-	selectCh  chan int
-	confirmCh chan bool
-	inputCh   chan inputResponse
-	editDocCh chan editDocResponse
+	mu             sync.Mutex
+	selectCh       chan int
+	selectMultiCh  chan []int
+	confirmCh      chan bool
+	inputCh        chan inputResponse
+	editDocCh      chan editDocResponse
 
 	// done is closed when the UI is shutting down. Blocking interactive
 	// methods select on this channel so they return cancel values instead
@@ -184,6 +185,33 @@ func (b *BubbleTeaUI) Select(title string, options []string) (int, error) {
 	return idx, nil
 }
 
+func (b *BubbleTeaUI) SelectMulti(title string, options []string) ([]int, error) {
+	if len(options) == 0 {
+		return nil, nil
+	}
+
+	ch := make(chan []int, 1)
+
+	b.mu.Lock()
+	b.selectMultiCh = ch
+	b.mu.Unlock()
+
+	b.send(bridgeMultiSelectMsg{title: title, options: options})
+
+	var idxs []int
+	select {
+	case idxs = <-ch:
+	case <-b.done:
+		idxs = nil
+	}
+
+	b.mu.Lock()
+	b.selectMultiCh = nil
+	b.mu.Unlock()
+
+	return idxs, nil
+}
+
 func (b *BubbleTeaUI) Confirm(prompt string) (bool, error) {
 	ch := make(chan bool, 1)
 
@@ -278,6 +306,15 @@ func (b *BubbleTeaUI) resolveSelect(index int) {
 	b.mu.Unlock()
 	if ch != nil {
 		ch <- index
+	}
+}
+
+func (b *BubbleTeaUI) resolveSelectMulti(idxs []int) {
+	b.mu.Lock()
+	ch := b.selectMultiCh
+	b.mu.Unlock()
+	if ch != nil {
+		ch <- idxs
 	}
 }
 

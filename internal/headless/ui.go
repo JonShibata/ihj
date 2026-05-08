@@ -60,6 +60,30 @@ func (h *HeadlessUI) Select(title string, options []string) (int, error) {
 	return -1, nil
 }
 
+func (h *HeadlessUI) SelectMulti(title string, options []string) ([]int, error) {
+	if len(options) == 0 {
+		return nil, nil
+	}
+	huhOpts := make([]huh.Option[int], len(options))
+	for i, opt := range options {
+		huhOpts[i] = huh.NewOption(opt, i)
+	}
+	var selected []int
+	err := huh.NewMultiSelect[int]().
+		Title(title).
+		Options(huhOpts...).
+		Value(&selected).
+		Filterable(true).
+		Run()
+	if err != nil {
+		if err == huh.ErrUserAborted {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return selected, nil
+}
+
 func (h *HeadlessUI) Confirm(prompt string) (bool, error) {
 	var yes bool
 	err := huh.NewConfirm().

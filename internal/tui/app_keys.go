@@ -396,6 +396,14 @@ func (m AppModel) resolveBridgePopup(result *PopupResult) (tea.Model, tea.Cmd, b
 	case "bridge-input":
 		m.ui.resolveInput(result.Text, result.Canceled)
 		return m, nil, true
+
+	case "bridge-multi":
+		var idxs []int
+		if !result.Canceled {
+			idxs = result.Indices
+		}
+		m.ui.resolveSelectMulti(idxs)
+		return m, nil, true
 	}
 
 	return m, nil, false
