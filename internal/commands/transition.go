@@ -8,13 +8,16 @@ import (
 )
 
 // Transition prompts for a new status and applies the change to the issue.
-func Transition(ctx context.Context, ws *WorkspaceSession, issueKey string) error {
+// currentStatus is an optional hint — when non-empty, the provider can skip
+// the round-trip it would otherwise make to learn the issue's current state.
+// Pass "" when calling without prior knowledge of the issue.
+func Transition(ctx context.Context, ws *WorkspaceSession, issueKey, currentStatus string) error {
 	caps := ws.Provider.Capabilities()
 	if !caps.HasTransitions && caps.StatusSource != core.StatusSourceEntity {
 		return fmt.Errorf("provider %q does not support status transitions", ws.Workspace.Provider)
 	}
 
-	current, options, err := ws.Provider.TransitionsFor(ctx, issueKey)
+	current, options, err := ws.Provider.TransitionsFor(ctx, issueKey, currentStatus)
 	if err != nil {
 		return err
 	}

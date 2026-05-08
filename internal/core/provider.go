@@ -48,12 +48,16 @@ type Provider interface {
 	// ContentRenderer returns the provider's content format converter.
 	ContentRenderer() ContentRenderer
 
-	// TransitionsFor returns the selectable next-state names for the item
+	// TransitionsFor returns the selectable next-state names for the item.
+	// currentStatus, when non-empty, skips the round-trip the provider
+	// would otherwise make to learn the issue's current state — callers
+	// that already have the status (e.g. the TUI's loaded registry) can
+	// pass it directly to halve the perceived press-to-popup latency.
 	// along with a display label for the item's current state. The current
 	// state may be a synthesized/derived status (e.g. "Awaiting Review" on
 	// a GitHub PR) and is not itself selectable — callers render it as a
 	// header in the picker. Options contains only user-selectable targets.
-	TransitionsFor(ctx context.Context, id string) (current string, options []string, err error)
+	TransitionsFor(ctx context.Context, id, currentStatus string) (current string, options []string, err error)
 }
 
 // Sprint is a backend-agnostic sprint descriptor returned by SprintLister.
@@ -77,6 +81,33 @@ type SprintLister interface {
 // children of the displayed issue's parent) on demand.
 type ChildrenLister interface {
 	Children(ctx context.Context, parentKey string) ([]*WorkItem, error)
+}
+
+// Version is a backend-agnostic release version descriptor returned by
+// VersionLister. Released indicates the version has shipped; archived
+// versions are excluded from picker results upstream.
+type Version struct {
+	Name     string
+	Released bool
+}
+
+// VersionLister is an optional capability — providers that support
+// release versions (Jira's project versions / fix-version field) implement
+// it. Used by transition hooks to populate version pickers.
+type VersionLister interface {
+	ListVersions(ctx context.Context) ([]Version, error)
+}
+
+// LabelSuggester is an optional capability — providers that surface
+// historical / autocomplete suggestions for labels-typed custom fields
+// implement it. customFieldID is the backend-native numeric ID (e.g.
+// the digits from "customfield_12901"). prefix narrows the suggestions
+// (Jira's autocomplete returns only entries that start with the prefix);
+// pass "" for the alphabetic head. Used by transition hooks when the
+// target field is a labels custom field — those have no createmeta
+// allowedValues and no project-version source, only suggestions.
+type LabelSuggester interface {
+	SuggestLabels(ctx context.Context, customFieldID int, prefix string) ([]string, error)
 }
 
 // AttachmentDownloader is an optional capability — fetches an attachment
@@ -142,6 +173,7 @@ type FieldType string
 
 const (
 	FieldString      FieldType = "string"
+	FieldNumber      FieldType = "number" // Numeric custom field — backend expects a JSON number, not a quoted string.
 	FieldEnum        FieldType = "enum"
 	FieldStringArray FieldType = "string_array"
 	FieldBool        FieldType = "bool"

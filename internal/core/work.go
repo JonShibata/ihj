@@ -275,9 +275,11 @@ func priorityWeightOf(w *WorkItem, m map[string]int) int {
 	return 99
 }
 
-// compareIDsNatural orders IDs so digit runs compare as numbers, making
+// CompareIDsNatural orders IDs so digit runs compare as numbers, making
 // "PROJ-9" < "PROJ-10" and "acme/widgets#2" < "acme/widgets#10". Non-digit
 // runs compare lexicographically as usual.
+func CompareIDsNatural(a, b string) bool { return compareIDsNatural(a, b) }
+
 func compareIDsNatural(a, b string) bool {
 	i, j := 0, 0
 	for i < len(a) && j < len(b) {

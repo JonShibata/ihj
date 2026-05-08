@@ -16,7 +16,9 @@ import (
 	"fmt"
 	"maps"
 	"os"
+	"sort"
 	"strings"
+	"sync"
 
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -147,6 +149,13 @@ func (p *Provider) Create(ctx context.Context, item *core.WorkItem) (string, err
 
 // Update applies changes to an existing work item.
 func (p *Provider) Update(ctx context.Context, id string, changes *core.Changes) error {
+	if l := dbg(); l != nil {
+		status := ""
+		if changes.Status != nil {
+			status = *changes.Status
+		}
+		l.Printf("Update id=%s status=%q fields=%+v", id, status, changes.Fields)
+	}
 	fields := make(map[string]any)
 
 	if changes.Summary != nil {
@@ -177,6 +186,10 @@ func (p *Provider) Update(ctx context.Context, id string, changes *core.Changes)
 	}
 	for k, v := range tx.fields {
 		fields[k] = v
+	}
+	if l := dbg(); l != nil {
+		l.Printf("Update id=%s translated fields=%+v sprintTarget=%q sprintByID=%d assignUser=%v",
+			id, fields, tx.sprintTarget, tx.sprintByID, tx.assignUser)
 	}
 
 	if len(fields) > 0 {
@@ -287,6 +300,113 @@ func (p *Provider) ListSprints(ctx context.Context, states []string) ([]core.Spr
 	return out, nil
 }
 
+// ListVersions implements core.VersionLister. Returns the project's
+// release versions sorted unreleased-first, then released, alphabetical
+// within each group. Archived versions are filtered out — they're
+// historical noise that Jira refuses to assign anyway.
+func (p *Provider) ListVersions(ctx context.Context) ([]core.Version, error) {
+	if p.cfg == nil || p.cfg.ProjectKey == "" {
+		return nil, fmt.Errorf("workspace has no project_key configured")
+	}
+	versions, err := p.client.FetchVersions(ctx, p.cfg.ProjectKey)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]core.Version, 0, len(versions))
+	for _, v := range versions {
+		if v.Archived {
+			continue
+		}
+		out = append(out, core.Version{Name: v.Name, Released: v.Released})
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Released != out[j].Released {
+			return !out[i].Released // unreleased first
+		}
+		return strings.ToLower(out[i].Name) < strings.ToLower(out[j].Name)
+	})
+	return out, nil
+}
+
+// SuggestLabels implements core.LabelSuggester. When prefix is empty,
+// fans out across the seed alphabet ("" + 0-9 + a-z) so the picker has
+// the full historical label set instead of Jira's per-query alphabetic
+// head (Jira caps each suggest call at ~15 entries — without this fan
+// out the picker would only ever see the first 15 names). Branches that
+// hit the cap recursively drill one more character so dense prefixes
+// like "2" surface "26.x" entries that would otherwise be hidden behind
+// the alphabetically-earlier "2.0" / "2.1" cluster.
+//
+// When prefix is set, queries that one prefix only — used by the
+// filter-as-you-type path. Results are deduped and sorted alphabetically.
+func (p *Provider) SuggestLabels(ctx context.Context, customFieldID int, prefix string) ([]string, error) {
+	if prefix != "" {
+		return p.client.FetchLabelSuggestions(ctx, customFieldID, prefix)
+	}
+
+	const (
+		jiraSuggestCap = 15 // Empirical: each call returns at most this many.
+		maxDrillDepth  = 3  // Bound the recursion: prefix+3 chars covers nearly all real label sets.
+		maxConcurrent  = 16 // Soft per-host cap so we don't hammer Jira.
+	)
+	alphabet := "0123456789abcdefghijklmnopqrstuvwxyz"
+
+	var (
+		mu       sync.Mutex
+		seen     = map[string]bool{}
+		firstErr error
+	)
+	sem := make(chan struct{}, maxConcurrent)
+	var wg sync.WaitGroup
+
+	var drill func(prefix string, depth int)
+	drill = func(prefix string, depth int) {
+		defer wg.Done()
+		sem <- struct{}{}
+		labels, err := p.client.FetchLabelSuggestions(ctx, customFieldID, prefix)
+		<-sem
+
+		mu.Lock()
+		if err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			mu.Unlock()
+			return
+		}
+		for _, l := range labels {
+			seen[l] = true
+		}
+		mu.Unlock()
+
+		if len(labels) >= jiraSuggestCap && depth < maxDrillDepth {
+			for i := 0; i < len(alphabet); i++ {
+				wg.Add(1)
+				go drill(prefix+string(alphabet[i]), depth+1)
+			}
+		}
+	}
+
+	wg.Add(1)
+	go drill("", 0)
+	for i := 0; i < len(alphabet); i++ {
+		wg.Add(1)
+		go drill(string(alphabet[i]), 0)
+	}
+	wg.Wait()
+
+	if len(seen) == 0 && firstErr != nil {
+		return nil, firstErr
+	}
+
+	out := make([]string, 0, len(seen))
+	for l := range seen {
+		out = append(out, l)
+	}
+	sort.Strings(out)
+	return out, nil
+}
+
 // Comment adds a comment to a Jira issue.
 func (p *Provider) Comment(ctx context.Context, id string, body string) error {
 	ast, err := document.ParseMarkdownString(body)
@@ -345,15 +465,55 @@ func (p *Provider) Capabilities() core.Capabilities {
 // TransitionsFor returns the selectable workflow transition names for the
 // issue along with its current status name. Jira filters transitions by
 // workflow on the server, so we simply surface what the API returns.
-func (p *Provider) TransitionsFor(ctx context.Context, id string) (string, []string, error) {
-	item, err := p.Get(ctx, id)
-	if err != nil {
-		return "", nil, err
+func (p *Provider) TransitionsFor(ctx context.Context, id, currentStatus string) (string, []string, error) {
+	// When the caller already knows the current status (TUI passes it
+	// straight from its loaded registry), skip the issue Get entirely
+	// and only fetch the transitions list. Otherwise fire both requests
+	// in parallel — they don't depend on each other.
+	if currentStatus != "" {
+		transitions, err := p.client.FetchTransitions(ctx, id)
+		if err != nil {
+			return "", nil, fmt.Errorf("fetching transitions for %s: %w", id, err)
+		}
+		return currentStatus, filterTransitions(transitions, currentStatus), nil
 	}
-	transitions, err := p.client.FetchTransitions(ctx, id)
-	if err != nil {
-		return "", nil, fmt.Errorf("fetching transitions for %s: %w", id, err)
+
+	type itemResult struct {
+		item *core.WorkItem
+		err  error
 	}
+	type txResult struct {
+		transitions []transition
+		err         error
+	}
+	itemCh := make(chan itemResult, 1)
+	txCh := make(chan txResult, 1)
+
+	go func() {
+		item, err := p.Get(ctx, id)
+		itemCh <- itemResult{item: item, err: err}
+	}()
+	go func() {
+		t, err := p.client.FetchTransitions(ctx, id)
+		txCh <- txResult{transitions: t, err: err}
+	}()
+
+	itemR := <-itemCh
+	txR := <-txCh
+
+	if itemR.err != nil {
+		return "", nil, itemR.err
+	}
+	if txR.err != nil {
+		return "", nil, fmt.Errorf("fetching transitions for %s: %w", id, txR.err)
+	}
+
+	return itemR.item.Status, filterTransitions(txR.transitions, itemR.item.Status), nil
+}
+
+// filterTransitions returns the user-facing transition target names,
+// title-cased and with self-transitions (no-ops) removed.
+func filterTransitions(transitions []transition, currentStatus string) []string {
 	titleCase := cases.Title(language.English)
 	opts := make([]string, 0, len(transitions))
 	for _, t := range transitions {
@@ -361,13 +521,12 @@ func (p *Provider) TransitionsFor(ctx context.Context, id string) (string, []str
 		if name == "" {
 			name = t.Name
 		}
-		// Skip transitions that land on the current status — they're no-ops.
-		if strings.EqualFold(name, item.Status) {
+		if strings.EqualFold(name, currentStatus) {
 			continue
 		}
 		opts = append(opts, titleCase.String(name))
 	}
-	return item.Status, opts, nil
+	return opts
 }
 
 // ContentRenderer returns the Jira ADF content renderer.

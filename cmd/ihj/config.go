@@ -66,12 +66,56 @@ type rawWorkspace struct {
 }
 
 type rawTransitionHook struct {
-	Field    string   `yaml:"field"`
-	Prompt   string   `yaml:"prompt"`
-	Type     string   `yaml:"type"`
-	Required bool     `yaml:"required,omitempty"`
-	When     string   `yaml:"when,omitempty"`
-	Values   []string `yaml:"values,omitempty"`
+	Field    string             `yaml:"field"`
+	Prompt   string             `yaml:"prompt"`
+	Type     string             `yaml:"type"`
+	Required bool               `yaml:"required,omitempty"`
+	When     string             `yaml:"when,omitempty"`
+	Values   []string           `yaml:"values,omitempty"`
+	Priority []rawPriorityRule  `yaml:"priority,omitempty"`
+}
+
+// rawPriorityRule accepts either a bare YAML string (treated as Match
+// with default Sort) or a {match, sort, seed} map. Seed accepts a single
+// string or a list — both are normalized to []string.
+type rawPriorityRule struct {
+	Match string
+	Sort  string
+	Seed  []string
+	Years int
+}
+
+func (r *rawPriorityRule) UnmarshalYAML(data []byte) error {
+	var s string
+	if err := yaml.Unmarshal(data, &s); err == nil && s != "" {
+		r.Match = s
+		return nil
+	}
+	var obj struct {
+		Match string `yaml:"match"`
+		Sort  string `yaml:"sort"`
+		Seed  any    `yaml:"seed"`
+		Years int    `yaml:"years"`
+	}
+	if err := yaml.Unmarshal(data, &obj); err != nil {
+		return err
+	}
+	r.Match = obj.Match
+	r.Sort = obj.Sort
+	r.Years = obj.Years
+	switch v := obj.Seed.(type) {
+	case string:
+		if v != "" {
+			r.Seed = []string{v}
+		}
+	case []any:
+		for _, x := range v {
+			if s, ok := x.(string); ok && s != "" {
+				r.Seed = append(r.Seed, s)
+			}
+		}
+	}
+	return nil
 }
 
 type rawExtractConfig struct {
@@ -285,9 +329,14 @@ func loadConfig(path string) (configResult, error) {
 					if h.Field == "" || h.Prompt == "" || h.Type == "" {
 						return configResult{}, fmt.Errorf("workspace '%s' transition_hooks[%q][%d]: field, prompt, type are required", slug, status, i)
 					}
+					priority := make([]core.PriorityRule, len(h.Priority))
+					for j, p := range h.Priority {
+						priority[j] = core.PriorityRule{Match: p.Match, Sort: p.Sort, Seed: p.Seed, Years: p.Years}
+					}
 					out[i] = core.TransitionHook{
 						Field: h.Field, Prompt: h.Prompt, Type: h.Type,
 						Required: h.Required, When: h.When, Values: h.Values,
+						Priority: priority,
 					}
 				}
 				hooks[status] = out

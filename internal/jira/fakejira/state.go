@@ -66,6 +66,7 @@ type State struct {
 	priorities []*entPriority
 	sprints    map[int]*entSprint
 	issues     map[string]*entIssue
+	Versions   []entVersion // exposed for the versions handler — populated by tests
 
 	// Factories used to mint future IDs deterministically.
 	issueFactory   *factory.Factory[entIssue]

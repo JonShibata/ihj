@@ -1,6 +1,7 @@
 package core
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -181,10 +182,69 @@ func (ws *Workspace) AllFieldDefs() FieldDefs {
 type TransitionHook struct {
 	Field    string   `json:"field"`              // alias key; maps via Provider field translation on write
 	Prompt   string   `json:"prompt"`             // prompt text shown to the user
-	Type     string   `json:"type"`               // text | csv | sprint | select
+	Type     string   `json:"type"`               // text | csv | sprint | select | version | versions
 	Required bool     `json:"required,omitempty"` // empty input cancels the transition
 	When     string   `json:"when,omitempty"`     // "field == value", e.g. "issuetype == Bug"
 	Values   []string `json:"values,omitempty"`   // only for type=select
+	// Priority is an ordered list of rules applied to picker options.
+	// Options matching rule[0].Match sort first, then rule[1].Match, etc.;
+	// unmatched options sort after all matched ones. Within a rank, Sort
+	// chooses the order. Only consulted by version/versions pickers today.
+	Priority []PriorityRule `json:"priority,omitempty"`
+}
+
+// Resolve returns the rule with Years (if set) materialised into a
+// concrete Match regex and Seed list anchored to the current year. The
+// returned rule has Years=0 so downstream consumers see only the
+// concrete fields. Now is injected for deterministic tests; production
+// callers pass time.Now.
+//
+// The generated Match is "^(?:YY|YY-1|…)\.(?:1[0-2]|[1-9])$" — the
+// minor must be a real month written without a leading zero (1-9 or
+// 10-12), so labels like "26.99" or "26.0" are rejected up front.
+func (r PriorityRule) Resolve(now time.Time) PriorityRule {
+	if r.Years <= 0 {
+		return r
+	}
+	yy := now.Year() % 100
+	years := make([]string, r.Years)
+	for i := 0; i < r.Years; i++ {
+		years[i] = fmt.Sprintf("%02d", (yy-i+100)%100)
+	}
+	out := r
+	out.Years = 0
+	out.Match = `^(?:` + strings.Join(years, "|") + `)\.(?:1[0-2]|[1-9])$`
+	out.Seed = years
+	return out
+}
+
+// PriorityRule ranks and orders picker options. Match is a Go regexp; the
+// first rule whose Match accepts an option claims that option for its
+// rank. Sort selects the within-rank order:
+//
+//	""             — preserve original order (post-dedupe alphabetical)
+//	"asc" / "desc" — lexicographic
+//	"version-asc"  — natural-number (so 26.10 > 26.5)
+//	"version-desc" — same, reversed (newest version first)
+//
+// Seed lists prefix queries the picker should use to fetch matching
+// labels (instead of dumping every historical label). When empty, the
+// picker auto-derives a seed from the longest literal head of Match
+// (the substring up to the first regex metachar after the leading "^"
+// anchor). When neither Seed nor a derivable head exists, the rule
+// contributes no fetch prefix and the picker falls back to broad
+// alphabet fanout for that branch.
+//
+// Years, when > 0, supersedes Match and Seed: the rule auto-targets
+// "YY.M" or "YY.MM" labels for the current year and the previous
+// (Years-1) years. Released versions roll over automatically — there is
+// no annual config edit. Equivalent hand-written form for Years: 3 in
+// 2026 would be Match="^(?:26|25|24)\\.\\d{1,2}$", Seed=["26","25","24"].
+type PriorityRule struct {
+	Match string   `json:"match,omitempty"`
+	Sort  string   `json:"sort,omitempty"`
+	Seed  []string `json:"seed,omitempty"`
+	Years int      `json:"years,omitempty"`
 }
 
 // Comment represents a comment on a work item.

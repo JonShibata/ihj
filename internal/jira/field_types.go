@@ -68,7 +68,7 @@ var knownCustomTypes = map[string]core.FieldType{
 	// --- Built-in (com.atlassian.jira.plugin.system.customfieldtypes) ---
 	"com.atlassian.jira.plugin.system.customfieldtypes:textfield":        core.FieldString,
 	"com.atlassian.jira.plugin.system.customfieldtypes:textarea":         core.FieldRichText, // ADF in v3
-	"com.atlassian.jira.plugin.system.customfieldtypes:float":            core.FieldString,   // number as string
+	"com.atlassian.jira.plugin.system.customfieldtypes:float":            core.FieldNumber,
 	"com.atlassian.jira.plugin.system.customfieldtypes:datepicker":       core.FieldString,
 	"com.atlassian.jira.plugin.system.customfieldtypes:datetime":         core.FieldString,
 	"com.atlassian.jira.plugin.system.customfieldtypes:url":              core.FieldString,
@@ -116,7 +116,7 @@ func schemaToFieldType(s fieldSchema) core.FieldType {
 	case "string":
 		return core.FieldString
 	case "number", "integer":
-		return core.FieldString // numbers represented as strings in manifests
+		return core.FieldNumber
 	case "array":
 		return core.FieldStringArray
 	case "option", "priority":

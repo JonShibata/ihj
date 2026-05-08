@@ -28,6 +28,16 @@ type MockProvider struct {
 	Caps              core.Capabilities
 	Renderer          core.ContentRenderer
 	TransitionOptions []string
+	VersionsReturn    []core.Version
+	VersionsErr       error
+
+	// LabelSuggester behavior. SuggestLabelsByPrefix maps prefix → labels;
+	// when set, the mock honours the requested prefix. SuggestLabelsReturn
+	// is used as a fallback for unmapped prefixes.
+	SuggestLabelsByPrefix map[string][]string
+	SuggestLabelsReturn   []string
+	SuggestLabelsErr      error
+	SuggestLabelsCalls    []string
 
 	// Call records.
 	CommentCalls []MockCommentCall
@@ -92,16 +102,35 @@ func (m *MockProvider) CurrentUser(_ context.Context) (*core.User, error) {
 
 func (m *MockProvider) Capabilities() core.Capabilities { return m.Caps }
 
-func (m *MockProvider) TransitionsFor(_ context.Context, id string) (string, []string, error) {
-	item, ok := m.Registry[id]
-	current := ""
-	if ok && item != nil {
-		current = item.Status
+func (m *MockProvider) TransitionsFor(_ context.Context, id, currentStatus string) (string, []string, error) {
+	current := currentStatus
+	if current == "" {
+		if item, ok := m.Registry[id]; ok && item != nil {
+			current = item.Status
+		}
 	}
 	if len(m.TransitionOptions) == 0 {
 		return current, nil, nil
 	}
 	return current, m.TransitionOptions, nil
+}
+
+// ListVersions makes MockProvider satisfy core.VersionLister. Optional —
+// callers that need it set VersionsReturn; others get the empty result
+// the implementation already returns.
+func (m *MockProvider) ListVersions(_ context.Context) ([]core.Version, error) {
+	return m.VersionsReturn, m.VersionsErr
+}
+
+// SuggestLabels makes MockProvider satisfy core.LabelSuggester. Returns
+// SuggestLabelsByPrefix[prefix] when configured for that prefix, else
+// falls back to SuggestLabelsReturn. Records every call's prefix.
+func (m *MockProvider) SuggestLabels(_ context.Context, _ int, prefix string) ([]string, error) {
+	m.SuggestLabelsCalls = append(m.SuggestLabelsCalls, prefix)
+	if v, ok := m.SuggestLabelsByPrefix[prefix]; ok {
+		return v, m.SuggestLabelsErr
+	}
+	return m.SuggestLabelsReturn, m.SuggestLabelsErr
 }
 
 func (m *MockProvider) ContentRenderer() core.ContentRenderer {

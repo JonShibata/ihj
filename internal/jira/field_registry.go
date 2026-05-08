@@ -381,11 +381,20 @@ func (wk wellKnownFields) TranslateFields(p *Provider, ctx context.Context, src 
 			}
 		default:
 			// Generic handler for unknown/custom fields: resolve Jira key
-			// and convert RichText to ADF.
+			// and convert types to the wire shape Jira expects.
 			def := defByKey[k]
-			if def.Type == core.FieldRichText {
+			switch {
+			case def.Type == core.FieldRichText:
 				if node, ok := v.(*document.Node); ok {
 					v = renderADFValue(node)
+				}
+			case def.Type == core.FieldNumber:
+				// Jira's number-typed customfields require a JSON number,
+				// not a quoted string. Coerce known string inputs.
+				if s, ok := v.(string); ok && s != "" {
+					if n, err := strconv.ParseFloat(s, 64); err == nil {
+						v = n
+					}
 				}
 			}
 			jiraKey := k

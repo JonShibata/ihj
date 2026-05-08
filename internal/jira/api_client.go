@@ -6,11 +6,48 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"math"
 	"net/http"
+	"net/url"
+	"os"
 	"strings"
+	"sync"
 	"time"
 )
+
+// debugLog is the package-level logger for raw Jira API traffic. Enabled
+// by setting IHJ_LOG=<path>; nil otherwise. Initialised lazily on first
+// use so import-time costs are zero in the common case.
+var (
+	debugLogOnce sync.Once
+	debugLog     *log.Logger
+)
+
+func dbg() *log.Logger {
+	debugLogOnce.Do(func() {
+		path := os.Getenv("IHJ_LOG")
+		if path == "" {
+			return
+		}
+		f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "ihj: cannot open IHJ_LOG=%s: %v\n", path, err)
+			return
+		}
+		debugLog = log.New(f, "", log.LstdFlags|log.Lmicroseconds)
+		debugLog.Printf("=== ihj log opened (pid=%d) ===", os.Getpid())
+	})
+	return debugLog
+}
+
+// truncate caps a string at n bytes for log readability.
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "...(+" + fmt.Sprintf("%d", len(s)-n) + " bytes)"
+}
 
 // API is the interface for all Jira operations. The concrete Client implements
 // it against the real REST API; MockClient implements it with in-memory data
@@ -35,6 +72,8 @@ type API interface {
 	FetchFields(ctx context.Context) ([]fieldDefinition, error)
 	FetchStatuses(ctx context.Context) ([]status, error)
 	FetchProject(ctx context.Context, projectKey string) (*project, error)
+	FetchVersions(ctx context.Context, projectKey string) ([]projectVersion, error)
+	FetchLabelSuggestions(ctx context.Context, customFieldID int, prefix string) ([]string, error)
 	FetchBoardsForProject(ctx context.Context, projectKey string) ([]agileBoard, error)
 	SearchUsers(ctx context.Context, query string) ([]user, error)
 	FetchCreateMetaIssueTypes(ctx context.Context, projectKey string) ([]createMetaIssueType, error)
@@ -252,6 +291,48 @@ func (c *Client) FetchProject(ctx context.Context, projectKey string) (*project,
 	return &p, nil
 }
 
+func (c *Client) FetchVersions(ctx context.Context, projectKey string) ([]projectVersion, error) {
+	var versions []projectVersion
+	if err := c.get(ctx, fmt.Sprintf("/rest/api/3/project/%s/versions", projectKey), &versions); err != nil {
+		return nil, err
+	}
+	return versions, nil
+}
+
+// FetchLabelSuggestions returns the autocomplete suggestions for a labels
+// custom field that begin with prefix. Backed by the JQL autocomplete
+// endpoint with the cf[N] field selector. The endpoint caps results at
+// ~15 entries per call, so callers wanting the full label set should
+// fan out across multiple seed prefixes (see FetchLabelSuggestionsAll).
+func (c *Client) FetchLabelSuggestions(ctx context.Context, customFieldID int, prefix string) ([]string, error) {
+	var resp struct {
+		Results []struct {
+			Value       string `json:"value"`
+			DisplayName string `json:"displayName"`
+		} `json:"results"`
+	}
+	q := url.Values{}
+	q.Set("fieldName", fmt.Sprintf("cf[%d]", customFieldID))
+	q.Set("fieldValue", prefix)
+	path := "/rest/api/3/jql/autocompletedata/suggestions?" + q.Encode()
+	if err := c.get(ctx, path, &resp); err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(resp.Results))
+	for _, r := range resp.Results {
+		v := r.Value
+		if v == "" {
+			v = r.DisplayName
+		}
+		if v != "" {
+			// Strip surrounding quotes the autocomplete API wraps numeric
+			// or otherwise-special values with — e.g. "\"0\"" → 0.
+			out = append(out, strings.Trim(v, `"`))
+		}
+	}
+	return out, nil
+}
+
 func (c *Client) FetchBoardsForProject(ctx context.Context, projectKey string) ([]agileBoard, error) {
 	var resp agileBoardList
 	if err := c.get(ctx, fmt.Sprintf("/rest/agile/1.0/board?projectKeyOrId=%s", projectKey), &resp); err != nil {
@@ -369,11 +450,13 @@ func (c *Client) put(ctx context.Context, path string, payload any) error {
 
 func (c *Client) newRequest(ctx context.Context, method, path string, payload any) (*http.Request, error) {
 	var body io.Reader
+	var bodyBytes []byte
 	if payload != nil {
 		data, err := json.Marshal(payload)
 		if err != nil {
 			return nil, fmt.Errorf("marshaling request: %w", err)
 		}
+		bodyBytes = data
 		body = bytes.NewReader(data)
 	}
 
@@ -385,6 +468,11 @@ func (c *Client) newRequest(ctx context.Context, method, path string, payload an
 	req.Header.Set("Authorization", "Basic "+c.token)
 	if payload != nil || method == http.MethodPost || method == http.MethodPut {
 		req.Header.Set("Content-Type", "application/json")
+	}
+	if l := dbg(); l != nil && bodyBytes != nil {
+		l.Printf("→ %s %s body=%s", method, path, truncate(string(bodyBytes), 4000))
+	} else if l != nil {
+		l.Printf("→ %s %s", method, path)
 	}
 	return req, nil
 }
@@ -408,6 +496,10 @@ func (c *Client) doWithRetry(req *http.Request, dest any) error {
 
 		resp, err := c.httpClient.Do(req)
 		if err != nil {
+			if l := dbg(); l != nil {
+				l.Printf("✗ %s %s transport error (attempt %d/%d): %v",
+					req.Method, req.URL.Path, attempt+1, c.maxRetries+1, err)
+			}
 			lastErr = fmt.Errorf("request failed: %w", err)
 			continue
 		}
@@ -415,6 +507,10 @@ func (c *Client) doWithRetry(req *http.Request, dest any) error {
 		bodyBytes, err := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
 		if err != nil {
+			if l := dbg(); l != nil {
+				l.Printf("✗ %s %s read error (attempt %d/%d): %v",
+					req.Method, req.URL.Path, attempt+1, c.maxRetries+1, err)
+			}
 			lastErr = fmt.Errorf("reading response: %w", err)
 			continue
 		}
@@ -425,6 +521,9 @@ func (c *Client) doWithRetry(req *http.Request, dest any) error {
 			ct := resp.Header.Get("Content-Type")
 			if !strings.Contains(ct, "application/json") && len(body) > 200 {
 				body = body[:200] + "... (truncated non-JSON response)"
+			}
+			if l := dbg(); l != nil {
+				l.Printf("← %d %s %s body=%s", resp.StatusCode, req.Method, req.URL.Path, truncate(body, 4000))
 			}
 			apiErr := &apiError{
 				StatusCode: resp.StatusCode,
@@ -437,6 +536,15 @@ func (c *Client) doWithRetry(req *http.Request, dest any) error {
 				continue
 			}
 			return apiErr
+		}
+
+		if l := dbg(); l != nil {
+			// Log body for endpoints we're actively debugging.
+			if strings.Contains(req.URL.Path, "/jql/autocompletedata/suggestions") {
+				l.Printf("← %d %s %s body=%s", resp.StatusCode, req.Method, req.URL.Path, truncate(string(bodyBytes), 4000))
+			} else {
+				l.Printf("← %d %s %s", resp.StatusCode, req.Method, req.URL.Path)
+			}
 		}
 
 		if len(bodyBytes) == 0 || dest == nil {

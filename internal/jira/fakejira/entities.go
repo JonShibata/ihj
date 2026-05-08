@@ -33,6 +33,13 @@ type entPriority struct {
 	Name string
 }
 
+type entVersion struct {
+	ID       string
+	Name     string
+	Released bool
+	Archived bool
+}
+
 type entSprint struct {
 	ID      int
 	Name    string

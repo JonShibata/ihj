@@ -219,7 +219,7 @@ func newRootCmd(initSession sessionInitFunc, version string) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return commands.Transition(cmd.Context(), ws, strings.ToUpper(args[0]))
+			return commands.Transition(cmd.Context(), ws, strings.ToUpper(args[0]), "")
 		},
 	}
 	transitionCmd.Flags().StringP("workspace", "w", "", "Workspace slug")

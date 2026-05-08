@@ -269,6 +269,17 @@ type project struct {
 	IssueTypes []issueType `json:"issueTypes"`
 }
 
+// projectVersion from GET /rest/api/3/project/{key}/versions.
+// Spec ref: Version (subset).
+type projectVersion struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	Released    bool   `json:"released"`
+	Archived    bool   `json:"archived"`
+	ReleaseDate string `json:"releaseDate,omitempty"`
+}
+
 // jiraFilter from GET /rest/api/3/filter/{id}.
 // Spec ref: Filter (subset)
 type jiraFilter struct {

@@ -90,9 +90,16 @@ func (m AppModel) executeAction(action Action) (tea.Model, tea.Cmd, bool) {
 		})
 
 	case ActionTransition:
-		return m.issueCommand(func(issueID string) error {
-			return commands.Transition(m.ctx, m.wsSess, issueID)
-		})
+		// Pass the registry-known status so the provider can skip the
+		// per-press GET /issue round-trip.
+		issue := m.targetIssue()
+		if issue == nil {
+			return m, nil, false
+		}
+		issueID, currentStatus := issue.ID, issue.Status
+		return m, m.runCommand(func() error {
+			return commands.Transition(m.ctx, m.wsSess, issueID, currentStatus)
+		}), true
 
 	case ActionAssign:
 		return m.issueCommand(func(issueID string) error {

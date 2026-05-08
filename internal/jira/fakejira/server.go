@@ -65,6 +65,7 @@ func (s *Server) buildMux() *http.ServeMux {
 	mux.HandleFunc("POST /rest/api/3/search/jql", s.handleSearch)
 	mux.HandleFunc("POST /rest/api/3/issue", s.handleCreateIssue)
 	mux.HandleFunc("GET /rest/api/3/project/{key}", s.handleProject)
+	mux.HandleFunc("GET /rest/api/3/project/{key}/versions", s.handleProjectVersions)
 	mux.HandleFunc("GET /rest/api/3/issue/createmeta/{project}/issuetypes", s.handleCreateMetaTypes)
 	mux.HandleFunc("GET /rest/api/3/issue/createmeta/{project}/issuetypes/{typeID}", s.handleCreateMetaFields)
 	mux.HandleFunc("GET /rest/api/3/filter/{id}", s.handleFilter)
@@ -163,6 +164,26 @@ func (s *Server) handleProject(w http.ResponseWriter, r *http.Request) {
 		"name":       s.State.Config.ProjectName,
 		"issueTypes": types,
 	})
+}
+
+func (s *Server) handleProjectVersions(w http.ResponseWriter, r *http.Request) {
+	key := r.PathValue("key")
+	if key != s.State.Config.ProjectKey {
+		http.Error(w, "project not found", http.StatusNotFound)
+		return
+	}
+	s.State.mu.RLock()
+	defer s.State.mu.RUnlock()
+	out := make([]map[string]any, 0, len(s.State.Versions))
+	for _, v := range s.State.Versions {
+		out = append(out, map[string]any{
+			"id":       v.ID,
+			"name":     v.Name,
+			"released": v.Released,
+			"archived": v.Archived,
+		})
+	}
+	writeJSON(w, out)
 }
 
 func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
