@@ -415,28 +415,38 @@ func (m *ListModel) buildSummaryCell(item listItem, issue *core.WorkItem, select
 }
 
 // buildSummaryLine renders the card-mode summary line that sits below
-// each metadata row. Tree glyph is omitted by design — narrow-width
-// layouts drop hierarchy for readability. When selected, the full line
-// (including right-padding) carries the cursor background so the card
-// reads as a contiguous highlighted block.
+// each metadata row. Roots get a fixed cardSummaryIndent of blank space;
+// nested rows get the tree-prefix glyphs (`└─`, `├─`, `│ `) at the same
+// column width so hierarchy is visible without re-introducing tree art
+// on the metadata row above. When selected, the full line (including
+// right-padding) carries the cursor background so the card reads as a
+// contiguous highlighted block.
 func (m *ListModel) buildSummaryLine(item listItem, selected bool) string {
 	styles := m.styles
 	issue := item.Issue
 	rowWithBackground := m.withBackground(selected)
 	style := m.summaryStyle(issue.Type, selected, rowWithBackground)
 
+	var prefix string
+	prefixWidth := cardSummaryIndent
+	if item.Depth > 0 {
+		prefix = m.renderTreePrefix(item, selected)
+		prefixWidth = lipgloss.Width(prefix)
+	} else {
+		prefix = strings.Repeat(" ", cardSummaryIndent)
+		if selected {
+			prefix = lipgloss.NewStyle().Background(styles.Cursor.GetBackground()).Render(prefix)
+		}
+	}
+
 	body := issue.Summary
 	issueWithNavSuffix := childIssueNavigationSuffix(issue)
-	budget := m.width - cardSummaryIndent - len(issueWithNavSuffix) - cardSummaryTrailPad
+	budget := m.width - prefixWidth - len(issueWithNavSuffix) - cardSummaryTrailPad
 	if budget > 0 && lipgloss.Width(body) > budget {
 		body = ansi.Truncate(body, budget, "…")
 	}
 
-	indent := strings.Repeat(" ", cardSummaryIndent)
-	if selected {
-		indent = lipgloss.NewStyle().Background(styles.Cursor.GetBackground()).Render(indent)
-	}
-	line := indent + style.Render(body)
+	line := prefix + style.Render(body)
 	if issueWithNavSuffix != "" {
 		line += rowWithBackground(styles.ChildCount).Render(issueWithNavSuffix)
 	}
