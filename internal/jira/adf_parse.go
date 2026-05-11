@@ -3,10 +3,17 @@ package jira
 import (
 	"encoding/json"
 	"fmt"
+	"path"
+	"regexp"
 	"strings"
 
 	"github.com/mikecsmith/ihj/internal/document"
 )
+
+// issueKeyRE matches a Jira issue key (project key + numeric id) anywhere
+// in a string. Used to recover a readable label from inlineCard URLs that
+// point at /browse/PROJ-123.
+var issueKeyRE = regexp.MustCompile(`\b[A-Z][A-Z0-9_]+-\d+\b`)
 
 // adfNode is the raw JSON shape that Jira's Atlassian Document Format uses.
 // We parse into this throwaway struct, then convert to our own AST.
@@ -100,6 +107,35 @@ func convertADFNode(raw *adfNode) (*document.Node, error) {
 		node.ColSpan = max(1, adfAttrInt(raw.Attrs, "colspan", 1))
 		node.RowSpan = max(1, adfAttrInt(raw.Attrs, "rowspan", 1))
 		return node, nil
+
+	case "inlineCard":
+		// Smart-link: how Jira's editor stores a pasted URL or auto-linked
+		// issue key (PROJ-123). No display text in the source — we recover
+		// the issue key from the URL when possible, else show the URL.
+		text := inlineCardLabel(adfAttrString(raw.Attrs, "url"))
+		if text == "" {
+			return nil, nil
+		}
+		return document.NewStyledText(text, document.Link(adfAttrString(raw.Attrs, "url"))), nil
+
+	case "blockCard":
+		// Block-level smart-link. Wrap the inlineCard equivalent in a
+		// paragraph so it slots in among other block children.
+		text := inlineCardLabel(adfAttrString(raw.Attrs, "url"))
+		if text == "" {
+			return nil, nil
+		}
+		return document.NewParagraph(
+			document.NewStyledText(text, document.Link(adfAttrString(raw.Attrs, "url"))),
+		), nil
+
+	case "mention":
+		// User mention. attrs.text already includes the leading "@".
+		text := adfAttrString(raw.Attrs, "text")
+		if text == "" {
+			text = "@" + adfAttrString(raw.Attrs, "id")
+		}
+		return document.NewStyledText(text), nil
 
 	case "mediaSingle", "media", "mediaInline":
 		node := document.NewMedia(
@@ -216,6 +252,23 @@ func adfAttrInt(attrs map[string]any, key string, fallback int) int {
 	default:
 		return fallback
 	}
+}
+
+// inlineCardLabel produces a display label for a smart-link URL. When the
+// URL is a Jira /browse/<KEY> link we return just the key; otherwise we
+// fall back to the URL's last path segment, then the full URL. Empty in,
+// empty out (callers drop the node).
+func inlineCardLabel(url string) string {
+	if url == "" {
+		return ""
+	}
+	if k := issueKeyRE.FindString(url); k != "" {
+		return k
+	}
+	if base := path.Base(url); base != "" && base != "/" && base != "." {
+		return base
+	}
+	return url
 }
 
 // extractCheckState detects a "[ ] " or "[x] " text prefix in a listItem's
