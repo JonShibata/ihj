@@ -130,20 +130,31 @@ var defaultStyleConfig = ansi.StyleConfig{
 	},
 	Code: ansi.StyleBlock{
 		StylePrimitive: ansi.StylePrimitive{
-			Color:           stringPtr("6"), // Cyan
-			BackgroundColor: stringPtr("8"), // Gray background
+			// Inline code: was Color "6" cyan on BG "8" grey, which read
+			// as a low-contrast smudge on light terminals. Drop the
+			// background and use ANSI "1" (red) so the span stands out
+			// against body text without depending on the terminal's
+			// background colour.
+			Color:       stringPtr("1"),
+			BlockPrefix: "`",
+			BlockSuffix: "`",
 		},
 	},
 	CodeBlock: ansi.StyleCodeBlock{
 		StyleBlock: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
-				Color: stringPtr("7"), // White
+				// Medium grey #888 reads on both light and dark terminals.
+				// Was "7" (white), invisible on light backgrounds.
+				Color: stringPtr("#7C6B5F"),
 			},
 			Margin: uintPtr(0),
 		},
 		Chroma: &ansi.Chroma{
 			Text: ansi.StylePrimitive{
-				Color: stringPtr("#C4C4C4"),
+				// Was "#C4C4C4" (light grey), invisible on light terminals.
+				// Chroma rejects ANSI 16-color codes (only HEX/named), so
+				// pick a mid-luminance grey that reads on both backgrounds.
+				Color: stringPtr("#7C6B5F"),
 			},
 			Comment: ansi.StylePrimitive{
 				Color: stringPtr("#676767"),
@@ -158,7 +169,8 @@ var defaultStyleConfig = ansi.StyleConfig{
 				Color: stringPtr("#EF8080"), // Red
 			},
 			Punctuation: ansi.StylePrimitive{
-				Color: stringPtr("#C4C4C4"),
+				// Same light-bg fix as Chroma.Text above.
+				Color: stringPtr("#7C6B5F"),
 			},
 			NameFunction: ansi.StylePrimitive{
 				Color: stringPtr("#5FD75F"), // Green
