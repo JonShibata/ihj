@@ -186,7 +186,12 @@ var defaultStyleConfig = ansi.StyleConfig{
 				Color: stringPtr("#5FD7D7"), // Cyan
 			},
 			LiteralString: ansi.StylePrimitive{
-				Color: stringPtr("#D7D75F"), // Yellow
+				// Amber, not pure yellow. Pure yellow (high R, high G, no B)
+				// washes out under Night Light / blue-light filters because
+				// it has no blue to lose; amber rides the warm shift instead
+				// of fading. Was #D7D75F (pale yellow) → #A8A030 (mustard) →
+				// #B8741F (amber) for night-light resilience.
+				Color: stringPtr("#B8741F"),
 			},
 			LiteralStringEscape: ansi.StylePrimitive{
 				Color: stringPtr("#5FD7D7"), // Cyan

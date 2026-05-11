@@ -20,9 +20,6 @@ import (
 	"strings"
 	"sync"
 
-	"golang.org/x/text/cases"
-	"golang.org/x/text/language"
-
 	"github.com/mikecsmith/ihj/internal/core"
 	"github.com/mikecsmith/ihj/internal/document"
 )
@@ -511,10 +508,14 @@ func (p *Provider) TransitionsFor(ctx context.Context, id, currentStatus string)
 	return itemR.item.Status, filterTransitions(txR.transitions, itemR.item.Status), nil
 }
 
-// filterTransitions returns the user-facing transition target names,
-// title-cased and with self-transitions (no-ops) removed.
+// filterTransitions returns the user-facing transition target names
+// (verbatim from Jira) with self-transitions (no-ops) removed. Names
+// are NOT case-normalised — the workspace's transition_hooks map is
+// keyed on the verbatim status name, and any rewriting here breaks
+// the lookup (e.g. "Development in Progress" → "Development In
+// Progress" misses the hook list and the transition POSTs without
+// the required field, which Jira rejects).
 func filterTransitions(transitions []transition, currentStatus string) []string {
-	titleCase := cases.Title(language.English)
 	opts := make([]string, 0, len(transitions))
 	for _, t := range transitions {
 		name := t.To.Name
@@ -524,7 +525,7 @@ func filterTransitions(transitions []transition, currentStatus string) []string 
 		if strings.EqualFold(name, currentStatus) {
 			continue
 		}
-		opts = append(opts, titleCase.String(name))
+		opts = append(opts, name)
 	}
 	return opts
 }
