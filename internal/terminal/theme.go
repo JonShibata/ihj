@@ -71,12 +71,18 @@ func DefaultTheme() *Theme {
 		Error:   lipgloss.Color("1"), // Red
 		Info:    lipgloss.Color("6"), // Cyan
 
-		TypeInitiative: lipgloss.Color("6"), // Cyan
-		TypeEpic:       lipgloss.Color("5"), // Magenta
-		TypeStory:      lipgloss.Color("4"), // Blue
-		TypeTask:       lipgloss.Color("7"), // White / default
-		TypeBug:        lipgloss.Color("1"), // Red
-		TypeSubtask:    lipgloss.Color("7"), // White
+		// Type fallbacks — used when an issue's type name doesn't appear in
+		// the workspace's types: config (e.g. cross-project tickets surfaced
+		// by a comment-mention filter). Pinned to dark HEX values rather
+		// than ANSI 16-color codes because some terminal palettes render
+		// the canonical ANSI codes as pale on light backgrounds — and the
+		// Task/Subtask "white" defaults were literally invisible there.
+		TypeInitiative: lipgloss.Color("#1F6E8E"), // Dark cyan
+		TypeEpic:       lipgloss.Color("#8E1F8E"), // Dark magenta
+		TypeStory:      lipgloss.Color("#1F3E8E"), // Dark blue
+		TypeTask:       lipgloss.Color("#404040"), // Dark grey (was ANSI 7 white — invisible on light bg)
+		TypeBug:        lipgloss.Color("#8E1F1F"), // Dark red
+		TypeSubtask:    lipgloss.Color("#606060"), // Medium grey (was ANSI 7 white)
 
 		StatusDone:    lipgloss.Color("2"), // Green
 		StatusActive:  lipgloss.Color("4"), // Blue

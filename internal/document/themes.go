@@ -145,7 +145,7 @@ var defaultStyleConfig = ansi.StyleConfig{
 			StylePrimitive: ansi.StylePrimitive{
 				// Medium grey #888 reads on both light and dark terminals.
 				// Was "7" (white), invisible on light backgrounds.
-				Color: stringPtr("#7C6B5F"),
+				Color: stringPtr("#4F4338"),
 			},
 			Margin: uintPtr(0),
 		},
@@ -154,36 +154,36 @@ var defaultStyleConfig = ansi.StyleConfig{
 				// Was "#C4C4C4" (light grey), invisible on light terminals.
 				// Chroma rejects ANSI 16-color codes (only HEX/named), so
 				// pick a mid-luminance grey that reads on both backgrounds.
-				Color: stringPtr("#7C6B5F"),
+				Color: stringPtr("#4F4338"),
 			},
 			Comment: ansi.StylePrimitive{
-				Color: stringPtr("#676767"),
+				Color: stringPtr("#4A4A4A"), // Was #676767, lifted off background
 			},
 			Keyword: ansi.StylePrimitive{
-				Color: stringPtr("#5F87FF"), // Blue
+				Color: stringPtr("#2E58D8"), // Blue (was #5F87FF, marginal on light bg)
 			},
 			KeywordType: ansi.StylePrimitive{
-				Color: stringPtr("#5FD7D7"), // Cyan
+				Color: stringPtr("#1F8E8E"), // Cyan (was #5FD7D7, ~70% lum, invisible)
 			},
 			Operator: ansi.StylePrimitive{
-				Color: stringPtr("#EF8080"), // Red
+				Color: stringPtr("#C53030"), // Red (was #EF8080, ~63% lum, washed out)
 			},
 			Punctuation: ansi.StylePrimitive{
 				// Same light-bg fix as Chroma.Text above.
-				Color: stringPtr("#7C6B5F"),
+				Color: stringPtr("#4F4338"),
 			},
 			NameFunction: ansi.StylePrimitive{
-				Color: stringPtr("#5FD75F"), // Green
+				Color: stringPtr("#2E8E2E"), // Green (was #5FD75F, ~65% lum)
 			},
 			NameClass: ansi.StylePrimitive{
-				Color: stringPtr("#5FD7D7"), // Cyan
+				Color: stringPtr("#1F8E8E"), // Cyan (was #5FD7D7)
 				Bold:  boolPtr(true),
 			},
 			NameTag: ansi.StylePrimitive{
-				Color: stringPtr("#D75FD7"), // Magenta
+				Color: stringPtr("#9E2EAE"), // Magenta (was #D75FD7, marginal)
 			},
 			LiteralNumber: ansi.StylePrimitive{
-				Color: stringPtr("#5FD7D7"), // Cyan
+				Color: stringPtr("#1F8E8E"), // Cyan (was #5FD7D7)
 			},
 			LiteralString: ansi.StylePrimitive{
 				// Amber, not pure yellow. Pure yellow (high R, high G, no B)
@@ -194,13 +194,13 @@ var defaultStyleConfig = ansi.StyleConfig{
 				Color: stringPtr("#B8741F"),
 			},
 			LiteralStringEscape: ansi.StylePrimitive{
-				Color: stringPtr("#5FD7D7"), // Cyan
+				Color: stringPtr("#1F8E8E"), // Cyan (was #5FD7D7)
 			},
 			GenericDeleted: ansi.StylePrimitive{
-				Color: stringPtr("#FF5F5F"), // Red
+				Color: stringPtr("#B82E2E"), // Red (was #FF5F5F, marginal)
 			},
 			GenericInserted: ansi.StylePrimitive{
-				Color: stringPtr("#5FD75F"), // Green
+				Color: stringPtr("#2E8E2E"), // Green (was #5FD75F)
 			},
 			GenericEmph: ansi.StylePrimitive{
 				Italic: boolPtr(true),

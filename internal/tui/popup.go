@@ -259,6 +259,14 @@ func (p *PopupModel) Update(msg tea.Msg) (tea.Cmd, *PopupResult) {
 		case PopupMultiSelect:
 			return p.updateMultiSelect(msg)
 		}
+	default:
+		// Non-key messages (clipboard pasteMsg, bracketed tea.PasteMsg)
+		// must reach the textarea so Ctrl+V and terminal paste work.
+		if p.mode == PopupInput {
+			var cmd tea.Cmd
+			p.input, cmd = p.input.Update(msg)
+			return cmd, nil
+		}
 	}
 	return nil, nil
 }

@@ -14,8 +14,9 @@ import (
 // wk provides standard field extraction; customFields maps Jira field IDs
 // (e.g. "customfield_10016") to their alias + type binding. Extraction is
 // intentionally broad (union of all types); display-time filtering via
-// TypeConfig.Fields controls per-type visibility.
-func issuesToWorkItems(issues []issue, wk wellKnownFields, customFields map[string]customFieldBinding) []*core.WorkItem {
+// TypeConfig.Fields controls per-type visibility. commentLimit caps how many
+// of the most recent comments are kept; 0 (or less) keeps all of them.
+func issuesToWorkItems(issues []issue, wk wellKnownFields, customFields map[string]customFieldBinding, commentLimit int) []*core.WorkItem {
 	items := make([]*core.WorkItem, 0, len(issues))
 
 	for _, iss := range issues {
@@ -64,10 +65,14 @@ func issuesToWorkItems(issues []issue, wk wellKnownFields, customFields map[stri
 			item.Description, _ = parseADF(f.Description)
 		}
 
-		// Parse last 3 comments.
+		// Parse the most recent comments, keeping at most commentLimit
+		// (commentLimit <= 0 keeps all).
 		if f.Comment != nil && len(f.Comment.Comments) > 0 {
 			comments := f.Comment.Comments
-			start := max(0, len(comments)-3)
+			start := 0
+			if commentLimit > 0 {
+				start = max(0, len(comments)-commentLimit)
+			}
 			for _, c := range comments[start:] {
 				cv := core.Comment{
 					Author:  c.Author.DisplayNameOrDefault("Unknown"),
@@ -169,8 +174,8 @@ func buildLinks(f *issueFields) []core.Link {
 }
 
 // issueToWorkItem converts a single Jira issue to a core.WorkItem.
-func issueToWorkItem(iss *issue, wk wellKnownFields, customFields map[string]customFieldBinding) *core.WorkItem {
-	items := issuesToWorkItems([]issue{*iss}, wk, customFields)
+func issueToWorkItem(iss *issue, wk wellKnownFields, customFields map[string]customFieldBinding, commentLimit int) *core.WorkItem {
+	items := issuesToWorkItems([]issue{*iss}, wk, customFields, commentLimit)
 	if len(items) == 0 {
 		return nil
 	}

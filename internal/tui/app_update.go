@@ -128,6 +128,16 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// When a popup is active, route fall-through messages (e.g. clipboard
+	// pasteMsg from a Paste command) to the popup so its textarea sees them.
+	if m.popup.Active() {
+		cmd, result := m.popup.Update(msg)
+		if result != nil {
+			return m.handlePopupResult(result)
+		}
+		return m, cmd
+	}
+
 	// Pass through to list (search input etc).
 	var cmd tea.Cmd
 	previousCursor := m.list.cursor

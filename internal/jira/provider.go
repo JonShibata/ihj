@@ -79,7 +79,7 @@ func (p *Provider) Search(ctx context.Context, filter string, noCache bool) ([]*
 	// Try cache first unless caller explicitly wants fresh data.
 	if !noCache && p.cacheDir != "" {
 		if cached, err := loadCache(p.cacheDir, p.ws.Slug, filter, p.ws.CacheTTL); err == nil {
-			return issuesToWorkItems(cached.Issues, p.wellKnown, p.customFieldMap()), nil
+			return issuesToWorkItems(cached.Issues, p.wellKnown, p.customFieldMap(), p.ws.CommentLimit), nil
 		}
 	}
 
@@ -98,7 +98,7 @@ func (p *Provider) Search(ctx context.Context, filter string, noCache bool) ([]*
 		_ = saveCache(p.cacheDir, p.ws.Slug, filter, issues)
 	}
 
-	return issuesToWorkItems(issues, p.wellKnown, p.customFieldMap()), nil
+	return issuesToWorkItems(issues, p.wellKnown, p.customFieldMap(), p.ws.CommentLimit), nil
 }
 
 // Get returns a single work item by its Jira issue key.
@@ -107,7 +107,7 @@ func (p *Provider) Get(ctx context.Context, id string) (*core.WorkItem, error) {
 	if err != nil {
 		return nil, fmt.Errorf("fetching issue %s: %w", id, err)
 	}
-	return issueToWorkItem(iss, p.wellKnown, p.customFieldMap()), nil
+	return issueToWorkItem(iss, p.wellKnown, p.customFieldMap(), p.ws.CommentLimit), nil
 }
 
 // Create persists a new work item and returns its assigned key.
@@ -277,7 +277,7 @@ func (p *Provider) Children(ctx context.Context, parentKey string) ([]*core.Work
 	if err != nil {
 		return nil, err
 	}
-	return issuesToWorkItems(issues, p.wellKnown, p.customFieldMap()), nil
+	return issuesToWorkItems(issues, p.wellKnown, p.customFieldMap(), p.ws.CommentLimit), nil
 }
 
 // ListSprints implements core.SprintLister. Returns sprints for the

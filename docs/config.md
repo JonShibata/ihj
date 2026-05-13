@@ -16,6 +16,7 @@ editor: "nvim" # Falls back to $EDITOR, then vim
 vim_mode: true # Enable vim-style modal key bindings
 default_workspace: "eng" # Workspace to open on launch
 cache_ttl: "10m" # Global cache TTL (default 15m). Workspaces can override.
+comment_limit: 0 # Comments shown in the detail pane (default 3; 0 = all). Workspaces can override.
 ```
 
 ## Layout

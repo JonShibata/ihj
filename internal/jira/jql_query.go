@@ -78,9 +78,24 @@ func interpolateJQL(template string, vars map[string]string) (string, error) {
 }
 
 // combineJQL appends a filter clause to base JQL, respecting ORDER BY.
+// Handles three shapes of base JQL:
+//
+//	"project = X ORDER BY Rank"  → "(project = X) AND (filter) ORDER BY Rank"
+//	"project = X"                → "(project = X) AND (filter)"
+//	"ORDER BY Rank"              → "(filter) ORDER BY Rank"   (no preceding clause)
+//
+// The third shape arises when a workspace wants no base filter (e.g. to
+// span every project) but still wants a sort order — without this branch,
+// the result would be the invalid "(ORDER BY Rank) AND (filter)".
 func combineJQL(base, filter string) string {
-	orderByPattern := regexp.MustCompile(`(?i)\s+ORDER\s+BY\s+`)
+	leadingOrderBy := regexp.MustCompile(`(?i)^\s*ORDER\s+BY\s+`)
+	if leadingOrderBy.MatchString(base) {
+		// TrimLeft so leading whitespace in the user's config doesn't
+		// produce "(filter)   ORDER BY ..." with a double space.
+		return fmt.Sprintf("(%s) %s", filter, strings.TrimLeft(base, " \t\n"))
+	}
 
+	orderByPattern := regexp.MustCompile(`(?i)\s+ORDER\s+BY\s+`)
 	parts := orderByPattern.Split(base, 2)
 	if len(parts) > 1 {
 		queryPart := parts[0]

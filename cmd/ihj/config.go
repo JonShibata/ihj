@@ -19,6 +19,7 @@ type rawConfig struct {
 	VimMode          bool                    `yaml:"vim_mode"`
 	DefaultWorkspace string                  `yaml:"default_workspace"`
 	CacheTTL         string                  `yaml:"cache_ttl"`
+	CommentLimit     *int                    `yaml:"comment_limit"` // Pointer to distinguish unset from 0 (= show all).
 	Guidance         string                  `yaml:"guidance"` // Removed — detected and rejected with a migration hint.
 	Shortcuts        map[string]string       `yaml:"shortcuts"`
 	Layout           rawLayout               `yaml:"layout"`
@@ -53,6 +54,7 @@ type rawWorkspace struct {
 	Server                string                         `yaml:"server"` // Server alias (references servers map)
 	Name                  string                         `yaml:"name"`
 	CacheTTL              string                         `yaml:"cache_ttl"`
+	CommentLimit          *int                           `yaml:"comment_limit"` // Per-workspace override; pointer distinguishes unset from 0 (= show all).
 	Guidance              string                         `yaml:"guidance"` // Removed — detected and rejected with a migration hint.
 	Extract               rawExtractConfig               `yaml:"extract"`
 	Fields                map[string]any                 `yaml:"fields,omitempty"` // Workspace-wide field aliases (alias → provider field ID).
@@ -217,7 +219,7 @@ func loadConfig(path string) (configResult, error) {
 
 	universalKeys := map[string]bool{
 		"server": true, "name": true, "types": true, "statuses": true, "filters": true,
-		"cache_ttl": true, "guidance": true, "extract": true, "fields": true,
+		"cache_ttl": true, "comment_limit": true, "guidance": true, "extract": true, "fields": true,
 		"transition_hooks":        true,
 		"view_command":            true,
 		"attachment_view_command": true,
@@ -231,6 +233,16 @@ func loadConfig(path string) (configResult, error) {
 			return configResult{}, fmt.Errorf("invalid global cache_ttl %q: %w", raw.CacheTTL, err)
 		}
 		globalCacheTTL = d
+	}
+
+	// Parse global comment limit (falls back to core.DefaultCommentLimit;
+	// 0 means show all comments).
+	globalCommentLimit := core.DefaultCommentLimit
+	if raw.CommentLimit != nil {
+		if *raw.CommentLimit < 0 {
+			return configResult{}, fmt.Errorf("invalid global comment_limit %d: must be 0 (all) or positive", *raw.CommentLimit)
+		}
+		globalCommentLimit = *raw.CommentLimit
 	}
 
 	workspaces := make(map[string]*core.Workspace, len(raw.Workspaces))
@@ -308,6 +320,15 @@ func loadConfig(path string) (configResult, error) {
 			cacheTTL = d
 		}
 
+		// Resolve comment limit: workspace > global > default (0 = all).
+		commentLimit := globalCommentLimit
+		if rws.CommentLimit != nil {
+			if *rws.CommentLimit < 0 {
+				return configResult{}, fmt.Errorf("workspace '%s': invalid comment_limit %d: must be 0 (all) or positive", slug, *rws.CommentLimit)
+			}
+			commentLimit = *rws.CommentLimit
+		}
+
 		// Resolve per-preset extract guidance from extract.presets config.
 		extractGuidance := resolveExtractGuidance(rws)
 
@@ -350,6 +371,7 @@ func loadConfig(path string) (configResult, error) {
 			ServerAlias:           rws.Server,
 			BaseURL:               srv.URL,
 			CacheTTL:              cacheTTL,
+			CommentLimit:          commentLimit,
 			ExtractGuidance:       extractGuidance,
 			Types:                 types,
 			Statuses:              statuses,

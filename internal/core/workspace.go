@@ -16,6 +16,10 @@ const (
 // DefaultCacheTTL is the cache freshness duration when no override is configured.
 const DefaultCacheTTL = 15 * time.Minute
 
+// DefaultCommentLimit is the number of most-recent comments shown when no
+// comment_limit override is configured. 0 (configured) means show all.
+const DefaultCommentLimit = 3
+
 // Workspace represents a configured scope of work items from a specific
 // provider. Each workspace has common fields (name, types, statuses) plus
 // provider-specific configuration. The Provider field is a discriminator
@@ -58,6 +62,11 @@ type Workspace struct {
 	// CacheTTL is the duration for which cached data is considered fresh.
 	// Resolved at config load: workspace cache_ttl > global cache_ttl > DefaultCacheTTL.
 	CacheTTL time.Duration `json:"-"`
+
+	// CommentLimit caps how many of the most recent comments are shown in
+	// the detail pane. 0 means show all. Resolved at config load:
+	// workspace comment_limit > global comment_limit > DefaultCommentLimit.
+	CommentLimit int `json:"-"`
 
 	// ExtractGuidance holds per-preset guidance overrides for the extract
 	// command, keyed by preset name (e.g. "refine", "triage"). When set,

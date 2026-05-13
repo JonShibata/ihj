@@ -26,7 +26,7 @@ func TestIssuesToWorkItems_ExtractsAllCustomFields(t *testing.T) {
 		"customfield_10002": {Alias: "bug_details", Type: core.FieldString},
 	}
 
-	items := issuesToWorkItems([]issue{{Key: "S-1", Fields: *fields}}, nil, customFields)
+	items := issuesToWorkItems([]issue{{Key: "S-1", Fields: *fields}}, nil, customFields, 0)
 	if len(items) != 1 {
 		t.Fatalf("got %d items, want 1", len(items))
 	}
@@ -54,7 +54,7 @@ func TestIssuesToWorkItems_RichTextExtracted(t *testing.T) {
 		"customfield_10003": {Alias: "acceptance_criteria", Type: core.FieldRichText},
 	}
 
-	items := issuesToWorkItems([]issue{{Key: "S-1", Fields: *fields}}, nil, customFields)
+	items := issuesToWorkItems([]issue{{Key: "S-1", Fields: *fields}}, nil, customFields, 0)
 	if items[0].Fields["acceptance_criteria"] == nil {
 		t.Error("rich text field should be extracted as document node")
 	}
@@ -73,9 +73,55 @@ func TestIssuesToWorkItems_MissingCustomFieldSkipped(t *testing.T) {
 		"customfield_10001": {Alias: "story_points", Type: core.FieldString},
 	}
 
-	items := issuesToWorkItems([]issue{{Key: "S-1", Fields: *fields}}, nil, customFields)
+	items := issuesToWorkItems([]issue{{Key: "S-1", Fields: *fields}}, nil, customFields, 0)
 	if _, ok := items[0].Fields["story_points"]; ok {
 		t.Error("field not in Jira response should not appear in Fields")
+	}
+}
+
+func TestIssuesToWorkItems_CommentLimit(t *testing.T) {
+	// Build an issue with five comments, oldest first (Jira's order).
+	comments := make([]comment, 5)
+	for i := range comments {
+		comments[i] = comment{
+			Author:  &user{DisplayName: "Author"},
+			Created: "2026-01-0" + string(rune('1'+i)) + "T10:00:00.000+0000",
+			Body:    json.RawMessage(`{"type":"doc","version":1,"content":[{"type":"paragraph","content":[{"type":"text","text":"c"}]}]}`),
+		}
+	}
+	fields := &issueFields{
+		Summary:   "Has comments",
+		IssueType: issueType{ID: "10", Name: "Story"},
+		Status:    status{Name: "Open"},
+		Comment:   &commentPage{Comments: comments, Total: len(comments)},
+	}
+
+	tests := []struct {
+		name  string
+		limit int
+		want  int
+	}{
+		{"limit fewer than total keeps the last N", 3, 3},
+		{"zero keeps all", 0, 5},
+		{"negative keeps all", -1, 5},
+		{"limit above total keeps all", 10, 5},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			items := issuesToWorkItems([]issue{{Key: "S-1", Fields: *fields}}, nil, nil, tt.limit)
+			if got := len(items[0].Comments); got != tt.want {
+				t.Errorf("limit %d: got %d comments, want %d", tt.limit, got, tt.want)
+			}
+		})
+	}
+
+	// A limit keeps the tail (most recent), not the head.
+	items := issuesToWorkItems([]issue{{Key: "S-1", Fields: *fields}}, nil, nil, 2)
+	got := items[0].Comments
+	if len(got) != 2 ||
+		got[0].Created != formatDateTime(comments[3].Created) ||
+		got[1].Created != formatDateTime(comments[4].Created) {
+		t.Errorf("limit 2 should keep the last two comments, got %+v", got)
 	}
 }
 
@@ -112,7 +158,7 @@ func TestIssuesToWorkItems_LinksFromIssueLinksAndParent(t *testing.T) {
 		},
 	}
 
-	items := issuesToWorkItems([]issue{{Key: "T-1", Fields: *fields}}, nil, nil)
+	items := issuesToWorkItems([]issue{{Key: "T-1", Fields: *fields}}, nil, nil, 0)
 	if len(items) != 1 {
 		t.Fatalf("got %d items", len(items))
 	}

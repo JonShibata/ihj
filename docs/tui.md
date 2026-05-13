@@ -16,7 +16,7 @@ The detail pane displays the selected issue's metadata in sections:
 - **Description** — rendered Markdown from the issue body.
 - **Child issues** — direct children with hint keys for navigation.
 - **Related issues** — non-hierarchical links (parent, blocks, blocked by, siblings sharing the same parent, relates to). Every link gets a hint key. Targets in the current filter view navigate instantly; targets outside the view trigger a `Provider.Get` and the detail pane jumps to them when they arrive (a transient "Loading X…" notice covers the latency).
-- **Comments** — the three most recent comments.
+- **Comments** — the most recent comments (the last three by default; configurable via `comment_limit`, where `0` shows all). See [config.md](config.md).
 
 ## Layout
 
