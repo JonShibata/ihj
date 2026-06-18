@@ -1,6 +1,7 @@
 package jira
 
 import (
+	"context"
 	"testing"
 
 	"github.com/mikecsmith/ihj/internal/core"
@@ -197,5 +198,42 @@ func TestTranslatedCases_MatchWellKnownFields(t *testing.T) {
 		if wf.FieldType == "" {
 			t.Errorf("translatedCases has %q but its FieldType is empty (system-only field)", key)
 		}
+	}
+}
+
+func TestTranslateFields_RichTextStringToADF(t *testing.T) {
+	// Transition hooks (type=text) and `edit --set` supply rich-text fields
+	// as plain strings. Jira REST v3 rejects raw strings for rich-text
+	// fields ("Operation value must be an Atlassian Document"), so
+	// TranslateFields must render them to ADF — the failure that blocked
+	// Bug → Done transitions (Root Cause / Resolution Description).
+	p := &Provider{
+		ws: &core.Workspace{
+			Types: []core.TypeConfig{{
+				Name: "Bug",
+				Fields: core.FieldDefs{{
+					Key:     "root_cause_description",
+					Type:    core.FieldRichText,
+					FieldID: "customfield_15566",
+				}},
+			}},
+		},
+	}
+	p.wellKnown = p.buildWellKnownFields()
+
+	tx, err := p.wellKnown.TranslateFields(p, context.Background(), map[string]any{
+		"root_cause_description": "a plain string root cause",
+	})
+	if err != nil {
+		t.Fatalf("TranslateFields: %v", err)
+	}
+
+	got, ok := tx.fields["customfield_15566"].(map[string]any)
+	if !ok {
+		t.Fatalf("rich-text field = %T (%v); want ADF map[string]any",
+			tx.fields["customfield_15566"], tx.fields["customfield_15566"])
+	}
+	if got["type"] != "doc" {
+		t.Errorf("ADF type = %v; want \"doc\"", got["type"])
 	}
 }

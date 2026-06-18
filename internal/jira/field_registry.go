@@ -385,8 +385,21 @@ func (wk wellKnownFields) TranslateFields(p *Provider, ctx context.Context, src 
 			def := defByKey[k]
 			switch {
 			case def.Type == core.FieldRichText:
-				if node, ok := v.(*document.Node); ok {
-					v = renderADFValue(node)
+				// Jira REST v3 requires ADF for rich-text fields. Editor
+				// flows supply a parsed AST; transition hooks and --set
+				// supply a plain string. Render both, parsing the string
+				// as Markdown like Comment() does.
+				switch val := v.(type) {
+				case *document.Node:
+					v = renderADFValue(val)
+				case string:
+					if val != "" {
+						ast, err := document.ParseMarkdownString(val)
+						if err != nil {
+							return nil, fmt.Errorf("rendering rich-text field %q: %w", k, err)
+						}
+						v = renderADFValue(ast)
+					}
 				}
 			case def.Type == core.FieldNumber:
 				// Jira's number-typed customfields require a JSON number,
