@@ -56,7 +56,7 @@ When the detail pane is focused (via Tab or Enter), `Up`/`Down` scroll the detai
 | `Alt+O`  | Open in browser                    |
 | `Alt+N`  | Copy git branch name to clipboard  |
 | `Alt+X`  | Extract issue context for LLM      |
-| `Alt+F`  | Switch filter                      |
+| `Alt+F`  | Switch filter / find by key or JQL |
 | `Alt+W`  | Switch workspace                   |
 | `Alt+S`  | Assign to sprint                   |
 | `Alt+V`  | View issue via external command (see [view_command](#external-viewer)) |
@@ -66,6 +66,8 @@ When the detail pane is focused (via Tab or Enter), `Up`/`Down` scroll the detai
 ### Search
 
 Type any character to start fuzzy filtering. Matches across issue key, summary, assignee, status, and type. Press `Esc` to clear the filter.
+
+This is a client-side filter over the issues already loaded. To pull up a ticket that isn't in the current view — a closed one, or one from a previous sprint — open the filter popup (`Alt+F` / `f`) and choose **Find by key or JQL…**. Type an issue key (`PROJ-123`) or any JQL clause (`status = Done`); it's run server-side against the board.
 
 ## Vim Mode
 
@@ -87,7 +89,7 @@ Single-character keys for actions and navigation:
 | `o`   | Open in browser                    |
 | `b`   | Copy git branch name               |
 | `x`   | Extract issue context for LLM      |
-| `f`   | Switch filter                      |
+| `f`   | Switch filter / find by key or JQL |
 | `w`   | Switch workspace                   |
 | `s`   | Assign to sprint                   |
 | `v`   | View issue via external command    |

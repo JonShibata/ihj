@@ -1105,19 +1105,41 @@ func TestJourney_ManyChildren_HintOverflow(t *testing.T) {
 
 // ── Journey: Edge cases ──
 
-func TestJourney_FilterSingleFilter(t *testing.T) {
-	// Workspace has only the default filter — pressing Filter shows notification.
-	m, ui, _ := journeyModel(t)
+func TestJourney_FilterFind(t *testing.T) {
+	// The filter popup always offers a "Find" entry (cursor 0). Selecting it
+	// opens a free-text input whose value is searched as an ad-hoc filter —
+	// letting the user pull up any ticket by key or JQL, regardless of sprint.
+	ui := NewBubbleTeaUI()
+	ui.EditorCmd = "cat"
+	h := testutil.NewTestHarness(t, ui)
+	items := testutil.TestItems()
+	h.Provider.SearchReturn = items
+
+	m := NewAppModel(context.Background(), h.Runtime, h.Session, h.Factory, h.WS, "default", items, time.Now(), ui, false, nil, 0, true)
+	m.ready = false
 	tm := startJourney(t, m, ui)
 	defer func() { _ = tm.Quit() }()
 
 	waitForEvent(t, ui, EventReady)
 
+	// Open the filter popup; Find is the first entry.
 	tm.Send(keyMsg(keys.Filter))
+	waitForEvent(t, ui, EventPopupSelect)
 
-	evt := waitForEvent(t, ui, EventNotify)
-	if !strings.Contains(evt.Data["message"], "Only one filter") {
-		t.Errorf("notify = %q, want 'Only one filter'", evt.Data["message"])
+	// Select Find (cursor 0) → free-text input opens.
+	tm.Send(keyMsg(keys.Focus))
+	evt := waitForEvent(t, ui, EventPopupInput)
+	if !strings.Contains(evt.Data["title"], "Find") {
+		t.Errorf("popup title = %q, want Find", evt.Data["title"])
+	}
+
+	// Type an issue key and submit; it flows through Search as the filter.
+	typeText(tm, "PROJ-9")
+	tm.Send(tea.KeyPressMsg{Code: tea.KeyEnter})
+
+	evt = waitForEvent(t, ui, EventNotify)
+	if !strings.Contains(evt.Data["message"], "PROJ-9") {
+		t.Errorf("notify = %q, want it to mention the searched key 'PROJ-9'", evt.Data["message"])
 	}
 }
 

@@ -218,6 +218,11 @@ func buildViewProcess(template, value string) (*exec.Cmd, error) {
 	return cmd, nil
 }
 
+// findFilterLabel is the synthetic first entry in the filter popup. Selecting
+// it opens a free-text input so the user can pull up any ticket by key or an
+// ad-hoc JQL clause (see handleFilterSelection and buildJQL).
+const findFilterLabel = "Find by key or JQL…"
+
 func (m AppModel) executeFilterSwitch() (tea.Model, tea.Cmd, bool) {
 	var otherFilters []string
 	for filterName := range m.ws.Filters {
@@ -225,13 +230,12 @@ func (m AppModel) executeFilterSwitch() (tea.Model, tea.Cmd, bool) {
 			otherFilters = append(otherFilters, filterName)
 		}
 	}
-	if len(otherFilters) == 0 {
-		m.setNotify("Only one filter available")
-		return m, nil, true
-	}
 	sort.Strings(otherFilters)
 
-	m.popup.ShowSelect("filter", "Switch Filter", otherFilters)
+	// Find is always available, so there's no "only one filter" case — it sits
+	// at cursor 0 so `f` then Enter jumps straight to it.
+	options := append([]string{findFilterLabel}, otherFilters...)
+	m.popup.ShowSelect("filter", "Switch Filter", options)
 	m.ui.Emit(EventPopupSelect, "title", "Switch Filter")
 	return m, nil, true
 }

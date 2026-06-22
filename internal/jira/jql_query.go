@@ -33,11 +33,16 @@ func buildJQL(ws *core.Workspace, cfg *Config, filterName string) (string, error
 		return "", fmt.Errorf("expanding base JQL for '%s': %w", ws.Slug, err)
 	}
 
-	// Get the filter clause from workspace filters.
+	// Get the filter clause from workspace filters. A name that isn't a
+	// registered filter is treated as an ad-hoc clause typed by the user
+	// (raw JQL or a bare issue key) — this powers the TUI "Find" input and
+	// the CLI `-f` flag for pulling up any ticket regardless of sprint.
 	filterJQL := ""
 	if filterName != "" {
 		if f, ok := ws.Filters[filterName]; ok {
 			filterJQL = strings.TrimSpace(f)
+		} else {
+			filterJQL = asJQLClause(filterName)
 		}
 	}
 
@@ -106,4 +111,18 @@ func combineJQL(base, filter string) string {
 	}
 
 	return fmt.Sprintf("(%s) AND (%s)", base, filter)
+}
+
+// issueKeyRe matches a bare Jira issue key like "PROJ-123".
+var issueKeyRe = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9]*-\d+$`)
+
+// asJQLClause turns user-typed filter text into a JQL clause. A bare issue
+// key (PROJ-123) becomes "key = PROJ-123" so the user can find a ticket
+// without writing JQL; anything else is used verbatim as a clause.
+func asJQLClause(s string) string {
+	s = strings.TrimSpace(s)
+	if issueKeyRe.MatchString(s) {
+		return "key = " + strings.ToUpper(s)
+	}
+	return s
 }

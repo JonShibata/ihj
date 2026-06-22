@@ -84,7 +84,10 @@ Every TUI action is also available as a standalone command. All issue commands a
 ```
 ihj                          Launch TUI (default)
 ihj tui [-w workspace] [-f filter]
-                             Launch TUI for a specific workspace/filter
+                             Launch TUI for a specific workspace/filter.
+                             -f also accepts an issue key or ad-hoc JQL clause
+                             (e.g. -f PROJ-123, -f "status = Done") to pull up
+                             any ticket regardless of sprint or status.
 ihj jira demo                Launch TUI with synthetic data (no credentials needed)
 ihj jira bootstrap <project> Scaffold config from a Jira project
 ihj auth login <server>      Store an access token for a server

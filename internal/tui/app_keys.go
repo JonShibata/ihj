@@ -344,6 +344,13 @@ func (m AppModel) handlePopupResult(result *PopupResult) (tea.Model, tea.Cmd) {
 		return m.handleFilterSelection(result.Value)
 	case "workspace":
 		return m.handleWorkspaceSelection(result.Value)
+	case "adhocfilter":
+		// Run the typed text through the same fetch path as named filters.
+		if result.Text == "" {
+			return m, nil
+		}
+		m.loading = "Searching " + result.Text + "..."
+		return m, m.fetchData(result.Text, fetchOpts{})
 	}
 
 	return m, nil
@@ -351,6 +358,11 @@ func (m AppModel) handlePopupResult(result *PopupResult) (tea.Model, tea.Cmd) {
 
 func (m AppModel) handleFilterSelection(filterName string) (tea.Model, tea.Cmd) {
 	if filterName == "" {
+		return m, nil
+	}
+	if filterName == findFilterLabel {
+		m.popup.ShowInput("adhocfilter", "Find issue (key or JQL)", "e.g. PROJ-123 or status = Done")
+		m.ui.Emit(EventPopupInput, "title", "Find issue (key or JQL)")
 		return m, nil
 	}
 	if filterName == m.filter {
