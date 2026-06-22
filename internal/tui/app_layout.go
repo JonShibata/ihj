@@ -139,7 +139,10 @@ func (m *AppModel) recalcLayout() {
 	m.listBottom = b.ListBottom
 
 	m.detail.SetSize(m.detailContentW, b.DetailH)
-	m.list.SetSize(m.innerW, m.listH)
+	// The list spans the same content width as the detail box and divider
+	// (innerW - detailBorderH). Using innerW alone sizes it 2 cells wider than
+	// the outer frame's content area, which wraps long rows. See renderScreen.
+	m.list.SetSize(m.innerW-detailBorderH, m.listH)
 	m.help.SetWidth(m.innerW)
 }
 

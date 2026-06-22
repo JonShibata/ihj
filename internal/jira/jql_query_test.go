@@ -15,15 +15,15 @@ func TestCombineJQL(t *testing.T) {
 	}{
 		{
 			name:   "base with clause and ORDER BY",
-			base:   "project = DEFBE ORDER BY Rank ASC",
+			base:   "project = PROJ ORDER BY Rank ASC",
 			filter: "assignee = currentUser()",
-			want:   "(project = DEFBE) AND (assignee = currentUser()) ORDER BY Rank ASC",
+			want:   "(project = PROJ) AND (assignee = currentUser()) ORDER BY Rank ASC",
 		},
 		{
 			name:   "base with clause only",
-			base:   "project = DEFBE",
+			base:   "project = PROJ",
 			filter: "assignee = currentUser()",
-			want:   "(project = DEFBE) AND (assignee = currentUser())",
+			want:   "(project = PROJ) AND (assignee = currentUser())",
 		},
 		{
 			name:   "base is ORDER BY only",
@@ -76,17 +76,17 @@ func TestBuildJQL_AdHocFilter(t *testing.T) {
 		Slug:    "team",
 		Filters: map[string]string{"active": "statusCategory != Done"},
 	}
-	cfg := &Config{JQL: "project = DEFBE ORDER BY Rank ASC"}
+	cfg := &Config{JQL: "project = PROJ ORDER BY Rank ASC"}
 
 	cases := []struct {
 		name       string
 		filterName string
 		want       string
 	}{
-		{"registered filter", "active", "(project = DEFBE) AND (statusCategory != Done) ORDER BY Rank ASC"},
-		{"bare key ad-hoc", "PROJ-9", "(project = DEFBE) AND (key = PROJ-9) ORDER BY Rank ASC"},
-		{"raw JQL ad-hoc", "status = Done", "(project = DEFBE) AND (status = Done) ORDER BY Rank ASC"},
-		{"empty filter", "", "project = DEFBE ORDER BY Rank ASC"},
+		{"registered filter", "active", "(project = PROJ) AND (statusCategory != Done) ORDER BY Rank ASC"},
+		{"bare key ad-hoc", "PROJ-9", "(project = PROJ) AND (key = PROJ-9) ORDER BY Rank ASC"},
+		{"raw JQL ad-hoc", "status = Done", "(project = PROJ) AND (status = Done) ORDER BY Rank ASC"},
+		{"empty filter", "", "project = PROJ ORDER BY Rank ASC"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
