@@ -119,6 +119,12 @@ type AppModel struct {
 	showHelp    bool // Toggle full help view via '?'.
 	showHelpBar bool // Config-driven: show/hide the help bar.
 
+	// isDark tracks whether the terminal has a dark background so the theme
+	// can adapt (selection bar and grey foregrounds flip per-background).
+	// Assumed dark until the terminal reports otherwise via
+	// tea.BackgroundColorMsg, which arrives shortly after start.
+	isDark bool
+
 	// View state: which pane is active and how it's arranged.
 	view ViewState
 	// Configurable detail pane height as a percentage (20-80, default 55).
@@ -131,7 +137,8 @@ type AppModel struct {
 
 // NewAppModel creates the TUI application model with the given data.
 func NewAppModel(ctx context.Context, rt *commands.Runtime, wsSess *commands.WorkspaceSession, factory commands.WorkspaceSessionFactory, ws *core.Workspace, filter string, items []*core.WorkItem, fetchedAt time.Time, ui *BubbleTeaUI, vimMode bool, shortcuts map[string]string, detailPct int, showHelpBar bool) AppModel {
-	theme := terminal.DefaultTheme()
+	isDark := true // assume dark until the terminal reports its background
+	theme := terminal.DefaultTheme(isDark)
 	styles := terminal.NewStyles(theme, ws, rt.Theme)
 	keys := terminal.DefaultKeyMap()
 	if vimMode {
@@ -185,6 +192,7 @@ func NewAppModel(ctx context.Context, rt *commands.Runtime, wsSess *commands.Wor
 		help:        h,
 		showHelpBar: showHelpBar,
 		detailPct:   detailPct,
+		isDark:      isDark,
 	}
 
 	// In vim mode, start in normal mode with search unfocused.
@@ -199,7 +207,10 @@ func NewAppModel(ctx context.Context, rt *commands.Runtime, wsSess *commands.Wor
 func (m AppModel) Err() error { return m.fatalErr }
 
 func (m AppModel) Init() tea.Cmd {
-	cmds := []tea.Cmd{m.list.Init(), m.detail.Init(), m.tickCmd()}
+	// RequestBackgroundColor lets the theme adapt to a light/dark terminal.
+	// Bubble Tea also emits this automatically on start; requesting it
+	// explicitly covers terminals/multiplexers that need the nudge.
+	cmds := []tea.Cmd{m.list.Init(), m.detail.Init(), m.tickCmd(), tea.RequestBackgroundColor}
 	if m.wsSess.Provider != nil {
 		// Pre-fetch the current user for comments/assign/create.
 		provider := m.wsSess.Provider

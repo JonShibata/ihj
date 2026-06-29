@@ -351,8 +351,9 @@ func (m *ListModel) visibleRows() int {
 func (m *ListModel) updatePrompt() {
 	countStr := fmt.Sprintf(" %d/%d ", len(m.filtered), len(m.allItems))
 
-	countStyled := lipgloss.NewStyle().Foreground(terminal.DefaultTheme().Info).Render(countStr)
-	chevron := lipgloss.NewStyle().Foreground(terminal.DefaultTheme().Muted).Render(core.GlyphChevron + " ")
+	theme := m.styles.Theme()
+	countStyled := lipgloss.NewStyle().Foreground(theme.Info).Render(countStr)
+	chevron := lipgloss.NewStyle().Foreground(theme.Muted).Render(core.GlyphChevron + " ")
 
 	m.search.Prompt = countStyled + chevron
 }

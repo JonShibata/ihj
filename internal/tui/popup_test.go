@@ -22,7 +22,7 @@ func bbCtrlKey(ch rune) tea.KeyPressMsg {
 }
 
 func newBlackboxTestPopup() tui.PopupModel {
-	theme := terminal.DefaultTheme()
+	theme := terminal.DefaultTheme(true)
 	styles := terminal.NewStyles(theme, nil, "")
 	keys := terminal.DefaultKeyMap()
 	p := tui.NewPopupModel(styles, keys)

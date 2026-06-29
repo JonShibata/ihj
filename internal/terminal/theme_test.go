@@ -8,7 +8,7 @@ import (
 )
 
 func TestTypeColor(t *testing.T) {
-	theme := terminal.DefaultTheme()
+	theme := terminal.DefaultTheme(true)
 	styles := terminal.NewStyles(theme, nil, "")
 
 	tests := []struct {
@@ -35,7 +35,7 @@ func TestTypeColor(t *testing.T) {
 }
 
 func TestStatusStyle(t *testing.T) {
-	theme := terminal.DefaultTheme()
+	theme := terminal.DefaultTheme(true)
 	styles := terminal.NewStyles(theme, nil, "")
 
 	tests := []struct {

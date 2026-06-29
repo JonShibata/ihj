@@ -57,6 +57,14 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m.handleMouseClick(msg)
 
+	// ── Theme ──
+	case tea.BackgroundColorMsg:
+		if dark := msg.IsDark(); dark != m.isDark {
+			m.isDark = dark
+			m.restyle()
+		}
+		return m, nil
+
 	// ── Tick ──
 	case tickMsg:
 		if m.notify != "" && !m.notifyAt.IsZero() && time.Since(m.notifyAt) > notifyAutoClearDuration {
@@ -462,6 +470,25 @@ func (m *AppModel) rebuildSubModels(items []*core.WorkItem, fetchedAt time.Time)
 	m.popup.SetSize(m.width, m.height)
 
 	m.syncDetail()
+}
+
+// restyle rebuilds the style set for the current terminal background and
+// propagates it to every sub-model. Triggered when the terminal reports its
+// background colour (tea.BackgroundColorMsg) and it differs from the assumed
+// default, so the selection bar and grey foregrounds adapt to light/dark.
+func (m *AppModel) restyle() {
+	m.styles = terminal.NewStyles(terminal.DefaultTheme(m.isDark), m.ws, m.runtime.Theme)
+	m.list.styles = m.styles
+	m.detail.styles = m.styles
+	m.popup.styles = m.styles
+	m.applyHelpStyles()
+	// The detail viewport and the list's search prompt cache rendered,
+	// styled strings; refresh them. The rest of the list and the popup read
+	// styles lazily at View time.
+	m.list.updatePrompt()
+	if m.detail.Issue() != nil {
+		m.detail.rebuildContent()
+	}
 }
 
 // applyHelpStyles propagates the current styles to the help bar model.

@@ -47,24 +47,27 @@ type Theme struct {
 	StatusDefault color.Color
 }
 
-// DefaultTheme returns the standard ihj color scheme.
-// Uses standard 16-color ANSI codes so colors adapt to the terminal theme,
-// matching the original Python TUI's use of \033[3Xm sequences.
-func DefaultTheme() *Theme {
+// DefaultTheme returns the standard ihj color scheme for the given terminal
+// background. Colours that carry meaning use standard 16-color ANSI codes so
+// they adapt to the terminal's own palette (matching the original Python TUI's
+// \033[3Xm sequences). Greys and the selection bar are chosen per-background
+// via lipgloss.LightDark: a mid-grey foreground tuned to read on white is
+// invisible on a dark selection bar, and vice-versa, so they must flip with
+// the background rather than being pinned to one set of values.
+func DefaultTheme(isDark bool) *Theme {
+	ld := lipgloss.LightDark(isDark)
 	return &Theme{
 		Accent: lipgloss.Color("4"), // Blue
-		// Muted/Text were color 8 ("bright black") and 7 ("white") — both
-		// render as near-invisible light shades on light terminal
-		// backgrounds. Use ANSI 240 (medium-dark grey) for muted, and
-		// leave Text unset so the terminal's default foreground is used.
-		// Background colors stay on 0/8 so dark borders look right;
-		// foreground colors that need to read on either background pick
-		// from the 256-color palette directly.
-		Muted:   lipgloss.Color("240"),
-		Surface: lipgloss.Color("0"), // Black background
-		Overlay: lipgloss.Color("8"), // Gray background
-		Text:    lipgloss.Color(""),  // Empty = use terminal default foreground.
-		Board:   lipgloss.Color("5"), // Magenta — title anchor (matches original)
+		// Greys flip with the background so secondary text stays legible:
+		// a dark grey reads on a light terminal, a light grey on a dark one.
+		// The selection bar (Overlay) sits one shade off the terminal
+		// background so every foreground rendered on it keeps roughly the
+		// contrast it has off the bar.
+		Muted:   ld(lipgloss.Color("240"), lipgloss.Color("245")),
+		Surface: ld(lipgloss.Color("254"), lipgloss.Color("0")),   // status bar background
+		Overlay: ld(lipgloss.Color("254"), lipgloss.Color("238")), // selection bar background
+		Text:    lipgloss.Color(""),                               // Empty = use terminal default foreground.
+		Board:   lipgloss.Color("5"),                              // Magenta — title anchor (matches original)
 
 		Success: lipgloss.Color("2"), // Green
 		Warning: lipgloss.Color("3"), // Yellow
@@ -73,23 +76,24 @@ func DefaultTheme() *Theme {
 
 		// Type fallbacks — used when an issue's type name doesn't appear in
 		// the workspace's types: config (e.g. cross-project tickets surfaced
-		// by a comment-mention filter). Pinned to dark HEX values rather
-		// than ANSI 16-color codes because some terminal palettes render
-		// the canonical ANSI codes as pale on light backgrounds — and the
-		// Task/Subtask "white" defaults were literally invisible there.
-		TypeInitiative: lipgloss.Color("#1F6E8E"), // Dark cyan
-		TypeEpic:       lipgloss.Color("#8E1F8E"), // Dark magenta
-		TypeStory:      lipgloss.Color("#1F3E8E"), // Dark blue
-		TypeTask:       lipgloss.Color("#404040"), // Dark grey (was ANSI 7 white — invisible on light bg)
-		TypeBug:        lipgloss.Color("#8E1F1F"), // Dark red
-		TypeSubtask:    lipgloss.Color("#606060"), // Medium grey (was ANSI 7 white)
+		// by a comment-mention filter). Dark terminals use the canonical ANSI
+		// 16-color codes (the terminal palette renders them vividly); light
+		// terminals use dark HEX values because several palettes render those
+		// ANSI codes pale on white — and the Task/Subtask "white" defaults
+		// were literally invisible there.
+		TypeInitiative: ld(lipgloss.Color("#1F6E8E"), lipgloss.Color("6")),   // cyan
+		TypeEpic:       ld(lipgloss.Color("#8E1F8E"), lipgloss.Color("5")),   // magenta
+		TypeStory:      ld(lipgloss.Color("#1F3E8E"), lipgloss.Color("4")),   // blue
+		TypeTask:       ld(lipgloss.Color("#404040"), lipgloss.Color("250")), // grey
+		TypeBug:        ld(lipgloss.Color("#8E1F1F"), lipgloss.Color("1")),   // red
+		TypeSubtask:    ld(lipgloss.Color("#606060"), lipgloss.Color("245")), // grey
 
-		StatusDone:    lipgloss.Color("2"), // Green
-		StatusActive:  lipgloss.Color("4"), // Blue
-		StatusReview:  lipgloss.Color("5"), // Magenta
-		StatusReady:   lipgloss.Color("6"), // Cyan
-		StatusBlocked: lipgloss.Color("1"), // Red
-		StatusDefault: lipgloss.Color("7"), // White
+		StatusDone:    lipgloss.Color("2"),                            // Green
+		StatusActive:  lipgloss.Color("4"),                            // Blue
+		StatusReview:  lipgloss.Color("5"),                            // Magenta
+		StatusReady:   lipgloss.Color("6"),                            // Cyan
+		StatusBlocked: lipgloss.Color("1"),                            // Red
+		StatusDefault: ld(lipgloss.Color("240"), lipgloss.Color("7")), // grey / white
 	}
 }
 
@@ -155,11 +159,10 @@ type Styles struct {
 // NewStyles builds the complete style set from a theme.
 func NewStyles(t *Theme, ws *core.Workspace, contentTheme string) *Styles {
 	// Faint(true) collapses to near-invisible light grey on light terminal
-	// backgrounds. Use an explicit medium-dark grey (ANSI 240) instead so
-	// help text and other secondary content stay legible on both white
-	// and dark themes — matches the dim-placeholder style already used in
-	// the detail metadata grid.
-	dim := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(240))
+	// backgrounds. Use the theme's adaptive Muted grey instead so help text
+	// and other secondary content stay legible on both white and dark
+	// themes (and on the selection bar, which Muted is tuned against).
+	dim := lipgloss.NewStyle().Foreground(t.Muted)
 	accent := lipgloss.NewStyle().Foreground(t.Accent)
 
 	// Build dynamic color maps from workspace config.
@@ -289,7 +292,7 @@ func (s *Styles) TypeColor(typeName string) color.Color {
 	}
 
 	// Fallback to defaults
-	t := DefaultTheme()
+	t := s.theme
 	switch lower {
 	case "initiative":
 		return t.TypeInitiative
@@ -346,7 +349,7 @@ func (s *Styles) StatusStyle(status string) (string, color.Color) {
 	}
 
 	// Fallback to heuristic defaults.
-	t := DefaultTheme()
+	t := s.theme
 	switch {
 	case containsAny(lower, "done", "closed", "resolved", "complete"):
 		return icon, t.StatusDone
@@ -402,7 +405,7 @@ func (s *Styles) PriorityIcon(priority string) string {
 	case containsAny(lower, "lowest", "trivial"):
 		return s.PrioTrivial.Render("▼")
 	default:
-		return lipgloss.NewStyle().Foreground(DefaultTheme().Muted).Render("−")
+		return lipgloss.NewStyle().Foreground(s.theme.Muted).Render("−")
 	}
 }
 
@@ -428,7 +431,7 @@ func (s *Styles) PriorityIconWithBg(priority string, selected bool) string {
 	case containsAny(lower, "lowest", "trivial"):
 		return withBg(s.PrioTrivial).Render("▼")
 	default:
-		return withBg(lipgloss.NewStyle().Foreground(DefaultTheme().Muted)).Render("−")
+		return withBg(lipgloss.NewStyle().Foreground(s.theme.Muted)).Render("−")
 	}
 }
 

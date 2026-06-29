@@ -59,7 +59,7 @@ func (m diffModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m diffModel) View() tea.View {
-	theme := terminal.DefaultTheme()
+	theme := terminal.DefaultTheme(true) // transient diff picker; dark default
 	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(theme.Accent)
 	fieldStyle := lipgloss.NewStyle().Bold(true).Foreground(theme.Info)
 	selectedStyle := lipgloss.NewStyle().Bold(true).Foreground(theme.Info)

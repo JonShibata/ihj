@@ -27,7 +27,7 @@ func testDetailModel() (tui.DetailModel, map[string]*core.WorkItem) {
 	}
 	core.LinkChildren(registry)
 
-	theme := terminal.DefaultTheme()
+	theme := terminal.DefaultTheme(true)
 	styles := terminal.NewStyles(theme, nil, "")
 	keys := terminal.DefaultKeyMap()
 	dm := tui.NewDetailModel(styles, registry, testWS("team-alpha"), keys)
@@ -334,7 +334,7 @@ func itoa(i int) string {
 func TestDetailView_ChildrenSectionListsAllChildIDs(t *testing.T) {
 	parent, registry := makeParentWithChildren(5)
 
-	theme := terminal.DefaultTheme()
+	theme := terminal.DefaultTheme(true)
 	styles := terminal.NewStyles(theme, nil, "")
 	keys := terminal.DefaultKeyMap()
 	dm := tui.NewDetailModel(styles, registry, testWS("proj"), keys)
@@ -360,7 +360,7 @@ func TestDetailView_ChildHintsDigitsThenLetters(t *testing.T) {
 	// default keymap leaves digits and letters unbound.
 	parent, registry := makeParentWithChildren(12)
 
-	theme := terminal.DefaultTheme()
+	theme := terminal.DefaultTheme(true)
 	styles := terminal.NewStyles(theme, nil, "")
 	keys := terminal.DefaultKeyMap()
 	dm := tui.NewDetailModel(styles, registry, testWS("proj"), keys)
@@ -389,7 +389,7 @@ func TestDetailView_VimModeExcludesBoundLetters(t *testing.T) {
 	// available and used first.
 	parent, registry := makeParentWithChildren(12)
 
-	theme := terminal.DefaultTheme()
+	theme := terminal.DefaultTheme(true)
 	styles := terminal.NewStyles(theme, nil, "")
 	keys := terminal.VimKeyMap()
 	dm := tui.NewDetailModel(styles, registry, testWS("proj"), keys)
@@ -436,7 +436,7 @@ func TestDetailView_ManyChildrenRollsOverToTwoCharHints(t *testing.T) {
 	overflow := len(keys.HintKeys()) + 5
 	parent, registry := makeParentWithChildren(overflow)
 
-	theme := terminal.DefaultTheme()
+	theme := terminal.DefaultTheme(true)
 	styles := terminal.NewStyles(theme, nil, "")
 	dm := tui.NewDetailModel(styles, registry, testWS("proj"), keys)
 	dm.SetSize(160, 200)
@@ -478,7 +478,7 @@ func TestDetailView_NoDescriptionDoesNotRenderSection(t *testing.T) {
 	}
 	core.LinkChildren(registry)
 
-	theme := terminal.DefaultTheme()
+	theme := terminal.DefaultTheme(true)
 	styles := terminal.NewStyles(theme, nil, "")
 	keys := terminal.DefaultKeyMap()
 	dm := tui.NewDetailModel(styles, registry, testWS("t"), keys)
@@ -496,7 +496,7 @@ func TestDetailView_EmptyStateShowsPlaceholder(t *testing.T) {
 	// With no issue set, the detail view must render a placeholder — not
 	// crash, not render a blank pane, not render stale state.
 	registry := map[string]*core.WorkItem{}
-	theme := terminal.DefaultTheme()
+	theme := terminal.DefaultTheme(true)
 	styles := terminal.NewStyles(theme, nil, "")
 	keys := terminal.DefaultKeyMap()
 	dm := tui.NewDetailModel(styles, registry, testWS("t"), keys)
@@ -515,7 +515,7 @@ func TestDetailView_RichIssueStructure(t *testing.T) {
 	_, registry := testutil.RichTestItems()
 
 	ws := testutil.TestWorkspace()
-	theme := terminal.DefaultTheme()
+	theme := terminal.DefaultTheme(true)
 	styles := terminal.NewStyles(theme, ws, "")
 	keys := terminal.DefaultKeyMap()
 	dm := tui.NewDetailModel(styles, registry, ws, keys)
@@ -552,7 +552,7 @@ func TestDetailView_RichIssueStructure(t *testing.T) {
 func TestDetailView_CommentsRenderAuthorAndBody(t *testing.T) {
 	_, registry := testutil.RichTestItems()
 	ws := testutil.TestWorkspace()
-	theme := terminal.DefaultTheme()
+	theme := terminal.DefaultTheme(true)
 	styles := terminal.NewStyles(theme, ws, "")
 	keys := terminal.DefaultKeyMap()
 	dm := tui.NewDetailModel(styles, registry, ws, keys)
@@ -574,7 +574,7 @@ func TestDetailView_DescriptionRendersMarkdown(t *testing.T) {
 	// the heading text and bullet items come through.
 	_, registry := testutil.RichTestItems()
 	ws := testutil.TestWorkspace()
-	theme := terminal.DefaultTheme()
+	theme := terminal.DefaultTheme(true)
 	styles := terminal.NewStyles(theme, ws, "")
 	keys := terminal.DefaultKeyMap()
 	dm := tui.NewDetailModel(styles, registry, ws, keys)
@@ -618,7 +618,7 @@ func TestDetailView_RichTextFieldRendersAsFullBlock(t *testing.T) {
 		tc.Fields = append(tc.Fields, extraDef)
 	}
 
-	theme := terminal.DefaultTheme()
+	theme := terminal.DefaultTheme(true)
 	styles := terminal.NewStyles(theme, nil, "")
 	keys := terminal.DefaultKeyMap()
 	dm := tui.NewDetailModel(styles, registry, ws, keys)
@@ -670,7 +670,7 @@ func TestDetailView_TypeSpecificFieldsDoNotLeakAcrossTypes(t *testing.T) {
 	}
 	core.LinkChildren(registry)
 
-	theme := terminal.DefaultTheme()
+	theme := terminal.DefaultTheme(true)
 	styles := terminal.NewStyles(theme, nil, "")
 	keys := terminal.DefaultKeyMap()
 	dm := tui.NewDetailModel(styles, registry, ws, keys)
@@ -723,7 +723,7 @@ func TestDetailView_UnpinnedCustomFieldsHidden(t *testing.T) {
 		tc.Fields = append(tc.Fields, unpinnedScalar, unpinnedRichText)
 	}
 
-	theme := terminal.DefaultTheme()
+	theme := terminal.DefaultTheme(true)
 	styles := terminal.NewStyles(theme, nil, "")
 	keys := terminal.DefaultKeyMap()
 	dm := tui.NewDetailModel(styles, registry, ws, keys)
@@ -768,7 +768,7 @@ func TestDetailView_PinnedCustomFieldsShown(t *testing.T) {
 		tc.Fields = append(tc.Fields, pinnedScalar, pinnedRichText)
 	}
 
-	theme := terminal.DefaultTheme()
+	theme := terminal.DefaultTheme(true)
 	styles := terminal.NewStyles(theme, nil, "")
 	keys := terminal.DefaultKeyMap()
 	dm := tui.NewDetailModel(styles, registry, ws, keys)
@@ -795,7 +795,7 @@ func TestDetailView_UnassignedShowsEmDash(t *testing.T) {
 	}
 	core.LinkChildren(registry)
 
-	theme := terminal.DefaultTheme()
+	theme := terminal.DefaultTheme(true)
 	styles := terminal.NewStyles(theme, nil, "")
 	keys := terminal.DefaultKeyMap()
 	dm := tui.NewDetailModel(styles, registry, testWS("test"), keys)
@@ -826,7 +826,7 @@ func TestDetailRelatedNavigation(t *testing.T) {
 	}
 	core.LinkChildren(registry)
 
-	theme := terminal.DefaultTheme()
+	theme := terminal.DefaultTheme(true)
 	styles := terminal.NewStyles(theme, nil, "")
 	keys := terminal.DefaultKeyMap()
 	dm := tui.NewDetailModel(styles, registry, testWS("rel"), keys)
@@ -894,7 +894,7 @@ func TestDetailSiblingNavigation(t *testing.T) {
 	}
 	core.LinkChildren(registry)
 
-	theme := terminal.DefaultTheme()
+	theme := terminal.DefaultTheme(true)
 	styles := terminal.NewStyles(theme, nil, "")
 	keys := terminal.DefaultKeyMap()
 	dm := tui.NewDetailModel(styles, registry, testWS("sib"), keys)
@@ -932,7 +932,7 @@ func TestDetailSiblings_ParentMissing(t *testing.T) {
 	}
 	core.LinkChildren(registry)
 
-	theme := terminal.DefaultTheme()
+	theme := terminal.DefaultTheme(true)
 	styles := terminal.NewStyles(theme, nil, "")
 	keys := terminal.DefaultKeyMap()
 	dm := tui.NewDetailModel(styles, registry, testWS("orphan"), keys)
@@ -955,7 +955,7 @@ func TestDetailNavTargetForKey_ChildrenBeforeRelated(t *testing.T) {
 	}
 	core.LinkChildren(registry)
 
-	theme := terminal.DefaultTheme()
+	theme := terminal.DefaultTheme(true)
 	styles := terminal.NewStyles(theme, nil, "")
 	keys := terminal.DefaultKeyMap()
 	dm := tui.NewDetailModel(styles, registry, testWS("mix"), keys)

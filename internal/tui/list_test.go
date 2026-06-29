@@ -11,7 +11,7 @@ import (
 )
 
 func testBlackboxListModel(registry map[string]*core.WorkItem) tui.ListModel {
-	theme := terminal.DefaultTheme()
+	theme := terminal.DefaultTheme(true)
 	styles := terminal.NewStyles(theme, nil, "")
 	sw := map[string]core.StatusOrderEntry{
 		"open": {Weight: 0, Color: "default"}, "to do": {Weight: 1, Color: "default"},

@@ -383,7 +383,7 @@ func (m *ListModel) buildRowCells(item listItem, selected bool) []string {
 	if assignee == "" {
 		assignee = core.GlyphEmDash
 	}
-	assigneeCell := rowWithBackground(lipgloss.NewStyle().Faint(true)).Render(assignee)
+	assigneeCell := rowWithBackground(lipgloss.NewStyle().Foreground(styles.Theme().Muted)).Render(assignee)
 
 	// Summary — tree prefix + styled body + optional child count.
 	summaryCell := m.buildSummaryCell(item, issue, selected, rowWithBackground)
@@ -509,7 +509,7 @@ func (m *ListModel) renderTreePrefix(item listItem, selected bool) string {
 				parentColor := styles.TypeColor(item.ParentType)
 				buf.WriteString(rowWithBackground(lipgloss.NewStyle().Foreground(parentColor)).Render(glyph))
 			} else {
-				buf.WriteString(rowWithBackground(lipgloss.NewStyle().Faint(true)).Render(glyph))
+				buf.WriteString(rowWithBackground(lipgloss.NewStyle().Foreground(styles.Theme().Muted)).Render(glyph))
 			}
 		}
 	}
