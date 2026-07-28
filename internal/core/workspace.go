@@ -55,8 +55,11 @@ type Workspace struct {
 
 	// AttachmentViewCommand runs when the user presses an attachment
 	// hint in the detail pane. {path} is substituted with a temp file
-	// holding the downloaded attachment. Defaults to
-	// `kitten icat --hold {path}` when unset, which works on kitty.
+	// holding the downloaded attachment. When set, it is used for every
+	// attachment regardless of type. When unset, the viewer is chosen by
+	// the attachment's MIME type / extension: images via `kitten icat`,
+	// video/audio via `mpv --vo=kitty`, and other files via the OS opener
+	// (xdg-open / open).
 	AttachmentViewCommand string `json:"attachmentViewCommand,omitempty"`
 
 	// CacheTTL is the duration for which cached data is considered fresh.

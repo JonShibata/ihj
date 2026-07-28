@@ -194,10 +194,12 @@ func (m *AppModel) tryChildNavigation(msg tea.KeyPressMsg, pending string) (bool
 	return true, m.fetchRelated(id)
 }
 
-// viewAttachment downloads the attachment via the provider, then shells
-// out to the configured attachment_view_command (default kitten icat
-// --hold) which holds until the user presses any key. Tempfile is
-// removed on completion.
+// viewAttachment downloads the attachment via the provider, then shells out
+// to a viewer. When attachment_view_command is configured it's used for every
+// attachment; otherwise the viewer is chosen by the attachment's type — images
+// via kitty's icat, video/audio via mpv, everything else via the OS opener
+// (see defaultAttachmentViewer). Image/video viewers hold the terminal until
+// the user quits. The tempfile is removed on completion.
 func (m AppModel) viewAttachment(a core.Attachment) tea.Cmd {
 	dl, ok := m.wsSess.Provider.(core.AttachmentDownloader)
 	if !ok {
@@ -206,7 +208,7 @@ func (m AppModel) viewAttachment(a core.Attachment) tea.Cmd {
 	}
 	tmpl := m.ws.AttachmentViewCommand
 	if tmpl == "" {
-		tmpl = "kitten icat --hold {path}"
+		tmpl = defaultAttachmentViewer(a)
 	}
 	url := a.ContentURL
 	suggested := a.Filename

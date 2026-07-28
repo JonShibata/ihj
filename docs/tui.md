@@ -152,4 +152,26 @@ workspaces:
 The template is whitespace-split; `{key}` substitutes with the selected
 issue's ID. When the viewer exits, the TUI redraws automatically.
 
+### Attachment viewer
+
+Pressing an attachment's hint key downloads it to a tempfile and opens it. By
+default the viewer is chosen by the attachment's type:
+
+| Type          | Default command             |
+| ------------- | --------------------------- |
+| Images        | `kitten icat --hold {path}` |
+| Video / audio | `mpv --vo=kitty {path}`     |
+| Everything else (PDFs, archives, …) | `xdg-open {path}` (`open {path}` on macOS) |
+
+The image and video viewers assume [kitty](https://sw.kovidgoyal.net/kitty/). To use
+a different viewer — or one command for every attachment type — set
+`attachment_view_command`; when set it applies to all attachments and `{path}`
+substitutes with the tempfile:
+
+```yaml
+workspaces:
+  mine:
+    attachment_view_command: "mpv --vo=sixel {path}"   # e.g. non-kitty terminals
+```
+
 Shortcuts must include a modifier prefix (`alt+`, `ctrl+`, `super+`, `hyper+`). Collisions with reserved bindings are rejected at config load.
