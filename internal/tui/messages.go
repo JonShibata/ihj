@@ -90,6 +90,14 @@ type siblingsFetchedMsg struct {
 	err      error
 }
 
+// historyFetchedMsg carries the result of an on-demand FetchHistory call
+// fired by the history action key. On success the overlay is opened.
+type historyFetchedMsg struct {
+	id      string
+	entries []core.HistoryEntry
+	err     error
+}
+
 // attachmentReadyMsg fires once an attachment download completes; the
 // detail pane handler then suspends the TUI and runs the viewer.
 type attachmentReadyMsg struct {

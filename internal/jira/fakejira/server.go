@@ -76,6 +76,7 @@ func (s *Server) buildMux() *http.ServeMux {
 	mux.HandleFunc("POST /rest/api/3/issue/{key}/transitions", s.handleDoTransition)
 	mux.HandleFunc("POST /rest/api/3/issue/{key}/comment", s.handleAddComment)
 	mux.HandleFunc("GET /rest/api/3/issue/{key}/comment", s.handleGetComments)
+	mux.HandleFunc("GET /rest/api/3/issue/{key}/changelog", s.handleGetChangelog)
 	mux.HandleFunc("PUT /rest/api/3/issue/{key}/assignee", s.handleAssignIssue)
 
 	// ── Agile API v1 ─────────────────────────────────────────────────
@@ -356,6 +357,34 @@ func (s *Server) handleGetComments(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	writeJSON(w, cp)
+}
+
+func (s *Server) handleGetChangelog(w http.ResponseWriter, r *http.Request) {
+	key := r.PathValue("key")
+	iss := s.State.Issue(key)
+	if iss == nil {
+		http.Error(w, "issue not found", http.StatusNotFound)
+		return
+	}
+	s.State.mu.RLock()
+	defer s.State.mu.RUnlock()
+	page := wireChangelogPage{
+		Values:     make([]wireChangelogEntry, 0, len(iss.Changelog)),
+		MaxResults: len(iss.Changelog), Total: len(iss.Changelog), IsLast: true,
+	}
+	for _, e := range iss.Changelog {
+		items := make([]wireChangelogItem, 0, len(e.Items))
+		for _, it := range e.Items {
+			items = append(items, wireChangelogItem{
+				Field: it.Field, FromString: it.FromString, ToString: it.ToString,
+			})
+		}
+		page.Values = append(page.Values, wireChangelogEntry{
+			ID: e.ID, Author: s.State.toWireUser(e.AuthorID),
+			Created: fmtISO(e.Created), Items: items,
+		})
+	}
+	writeJSON(w, page)
 }
 
 func (s *Server) handleUserSearch(w http.ResponseWriter, r *http.Request) {

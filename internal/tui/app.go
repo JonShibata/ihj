@@ -61,11 +61,12 @@ type AppModel struct {
 	ws      *core.Workspace
 	filter  string
 
-	list   ListModel
-	detail DetailModel
-	popup  PopupModel
-	styles *terminal.Styles
-	keys   terminal.KeyMap
+	list    ListModel
+	detail  DetailModel
+	popup   PopupModel
+	history HistoryModel
+	styles  *terminal.Styles
+	keys    terminal.KeyMap
 
 	width, height int
 	notify        string
@@ -118,6 +119,9 @@ type AppModel struct {
 	help        help.Model
 	showHelp    bool // Toggle full help view via '?'.
 	showHelpBar bool // Config-driven: show/hide the help bar.
+
+	// showHistory toggles the change-history overlay (fetched on demand).
+	showHistory bool
 
 	// isDark tracks whether the terminal has a dark background so the theme
 	// can adapt (selection bar and grey foregrounds flip per-background).
@@ -182,6 +186,7 @@ func NewAppModel(ctx context.Context, rt *commands.Runtime, wsSess *commands.Wor
 		list:        NewListModel(registry, styles, ws.StatusOrderMap, ws.PriorityOrderMap, ws.TypeOrderMap, fieldDefs),
 		detail:      NewDetailModel(styles, registry, ws, keys),
 		popup:       NewPopupModel(styles, keys),
+		history:     NewHistoryModel(styles),
 		styles:      styles,
 		keys:        keys,
 		registry:    registry,

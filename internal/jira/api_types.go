@@ -179,6 +179,35 @@ type comment struct {
 	Updated string          `json:"updated"`
 }
 
+// changelogPage wraps the paginated changelog returned by
+// GET /rest/api/3/issue/{key}/changelog. Entries arrive oldest-first.
+// Spec ref: PageOfChangelogs
+type changelogPage struct {
+	Values     []changelogEntry `json:"values"`
+	MaxResults int              `json:"maxResults"`
+	Total      int              `json:"total"`
+	StartAt    int              `json:"startAt"`
+	IsLast     bool             `json:"isLast"`
+}
+
+// changelogEntry is a single history event: one author's set of field
+// changes at one time.
+// Spec ref: Changelog
+type changelogEntry struct {
+	ID      string          `json:"id"`
+	Author  *user           `json:"author"`
+	Created string          `json:"created"`
+	Items   []changelogItem `json:"items"`
+}
+
+// changelogItem is one field's before/after values within a changelog entry.
+// Spec ref: ChangeDetails
+type changelogItem struct {
+	Field      string `json:"field"`
+	FromString string `json:"fromString"`
+	ToString   string `json:"toString"`
+}
+
 // searchRequest is the POST body for /rest/api/3/search/jql.
 // Spec ref: SearchRequestBean
 type searchRequest struct {

@@ -21,4 +21,5 @@ const (
 	ActionWorkspace
 	ActionSprint
 	ActionView
+	ActionHistory
 )

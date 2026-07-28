@@ -113,6 +113,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case attachmentReadyMsg:
 		return m.handleAttachmentReady(msg)
 
+	case historyFetchedMsg:
+		return m.handleHistoryFetched(msg)
+
 	// ── Data lifecycle ──
 	case userFetchedMsg:
 		if msg.err == nil && msg.displayName != "" {
@@ -344,6 +347,20 @@ func (m AppModel) handleAttachmentReady(msg attachmentReadyMsg) (tea.Model, tea.
 		}
 		return notifyMsg{title: "Viewed", message: filename}
 	})
+}
+
+// handleHistoryFetched opens the history overlay with the fetched entries,
+// or reports the error. The "Loading…" notify is cleared on success.
+func (m AppModel) handleHistoryFetched(msg historyFetchedMsg) (tea.Model, tea.Cmd) {
+	if msg.err != nil {
+		m.setNotify("History failed: " + msg.err.Error())
+		return m, nil
+	}
+	m.notify = ""
+	m.recalcHistorySize()
+	m.history.SetEntries(msg.id, msg.entries)
+	m.showHistory = true
+	return m, nil
 }
 
 // handleSiblingsFetched injects sibling rows derived from a Children()

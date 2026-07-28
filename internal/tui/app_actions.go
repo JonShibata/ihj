@@ -141,6 +141,9 @@ func (m AppModel) executeAction(action Action) (tea.Model, tea.Cmd, bool) {
 
 	case ActionView:
 		return m.executeView()
+
+	case ActionHistory:
+		return m.executeHistory()
 	}
 
 	return m, nil, false
@@ -193,6 +196,28 @@ func (m AppModel) executeView() (tea.Model, tea.Cmd, bool) {
 		}
 		return notifyMsg{title: "Viewed", message: issueKey}
 	}), true
+}
+
+// executeHistory fetches the targeted issue's change history on demand and,
+// on success, opens the scrollable history overlay. Providers that don't
+// implement core.HistoryFetcher get a graceful notify instead.
+func (m AppModel) executeHistory() (tea.Model, tea.Cmd, bool) {
+	issue := m.targetIssue()
+	if issue == nil {
+		return m, nil, false
+	}
+	fetcher, ok := m.wsSess.Provider.(core.HistoryFetcher)
+	if !ok {
+		m.setNotify("History not supported by this provider")
+		return m, nil, true
+	}
+	id := issue.ID
+	ctx := m.ctx
+	m.setNotify("Loading history for " + id + "…")
+	return m, func() tea.Msg {
+		entries, err := fetcher.FetchHistory(ctx, id)
+		return historyFetchedMsg{id: id, entries: entries, err: err}
+	}, true
 }
 
 // buildViewProcess parses a view_command template (whitespace-separated

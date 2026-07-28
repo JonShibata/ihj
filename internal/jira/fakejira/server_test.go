@@ -61,6 +61,50 @@ func TestServer_GetIssueByKey(t *testing.T) {
 	}
 }
 
+func TestServer_FetchHistory(t *testing.T) {
+	provider, _, _ := newFakeProvider(t)
+
+	entries, err := provider.FetchHistory(context.Background(), "DEMO-1")
+	if err != nil {
+		t.Fatalf("FetchHistory: %v", err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("got %d history entries, want 2", len(entries))
+	}
+
+	// Provider returns newest-first: the assignee/priority change was seeded
+	// most recently, so it comes before the status change.
+	newest := entries[0]
+	if newest.Author != "Alex Rivera" {
+		t.Errorf("newest entry author = %q, want Alex Rivera", newest.Author)
+	}
+	if newest.Created == "" {
+		t.Error("Created should be display-formatted, not empty")
+	}
+	if len(newest.Changes) != 2 {
+		t.Fatalf("newest entry has %d changes, want 2", len(newest.Changes))
+	}
+
+	var sawPriority bool
+	for _, c := range newest.Changes {
+		if c.Field == "priority" {
+			sawPriority = true
+			if c.From != "Medium" || c.To != "High" {
+				t.Errorf("priority change = %q -> %q, want Medium -> High", c.From, c.To)
+			}
+		}
+	}
+	if !sawPriority {
+		t.Error("expected a priority change in the newest entry")
+	}
+
+	// Oldest entry is the status transition.
+	oldest := entries[1]
+	if len(oldest.Changes) != 1 || oldest.Changes[0].Field != "status" {
+		t.Errorf("oldest entry = %+v, want a single status change", oldest.Changes)
+	}
+}
+
 func TestServer_CurrentUser(t *testing.T) {
 	provider, _, _ := newFakeProvider(t)
 	u, err := provider.CurrentUser(context.Background())

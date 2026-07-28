@@ -64,9 +64,10 @@ type entIssue struct {
 	Components []string
 	SprintID   int // 0 = no sprint
 
-	Comments []entComment
-	Created  time.Time
-	Updated  time.Time
+	Comments  []entComment
+	Changelog []entChangelog
+	Created   time.Time
+	Updated   time.Time
 
 	// Customs holds custom-field values keyed by "customfield_XXXXX".
 	// Values are raw Go types that we JSON-encode on response.
@@ -78,6 +79,21 @@ type entComment struct {
 	AuthorID string
 	Body     any // ADF
 	Created  time.Time
+}
+
+// entChangelog is one change event in an issue's history, oldest-first in the
+// slice (Jira returns changelogs ascending).
+type entChangelog struct {
+	ID       string
+	AuthorID string
+	Created  time.Time
+	Items    []entChangelogItem
+}
+
+type entChangelogItem struct {
+	Field      string
+	FromString string
+	ToString   string
 }
 
 // statusCategoryName returns the display name for a given category key.

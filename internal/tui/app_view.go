@@ -42,6 +42,9 @@ func (m AppModel) View() tea.View {
 	if m.showHelp {
 		screen = m.overlayHelp(screen)
 	}
+	if m.showHistory {
+		screen = m.overlayHistory(screen)
+	}
 	screen = m.overlayToast(screen)
 
 	view := tea.NewView(screen)

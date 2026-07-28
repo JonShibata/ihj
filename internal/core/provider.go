@@ -118,6 +118,31 @@ type AttachmentDownloader interface {
 	DownloadAttachment(ctx context.Context, url, suggestedName string) (path string, err error)
 }
 
+// HistoryEntry is one change event in a work item's history — a set of
+// field changes made by one author at one time. Created is pre-formatted
+// for display by the provider.
+type HistoryEntry struct {
+	Author  string
+	Created string
+	Changes []HistoryChange
+}
+
+// HistoryChange records a single field's before/after values within a
+// HistoryEntry. From/To are the display strings ("" means empty/unset).
+type HistoryChange struct {
+	Field string
+	From  string
+	To    string
+}
+
+// HistoryFetcher is an optional capability — fetches a work item's change
+// history on demand. Entries are ordered newest-first. The TUI type-asserts
+// this and surfaces the history in a scrollable overlay; providers that
+// don't implement it simply have no history view.
+type HistoryFetcher interface {
+	FetchHistory(ctx context.Context, id string) ([]HistoryEntry, error)
+}
+
 // User represents an authenticated user across any backend.
 type User struct {
 	ID          string `json:"id"` // Backend-specific ID (accountId for Jira, login for GitHub)

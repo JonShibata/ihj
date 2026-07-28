@@ -18,6 +18,12 @@ func (m AppModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	pending := m.pendingHint
 	m.pendingHint = ""
 
+	// The history overlay is modal: while open it captures all keys — scroll
+	// with the usual navigation keys, close on Esc or the history key.
+	if m.showHistory {
+		return m.handleHistoryKey(msg)
+	}
+
 	if m.vimMode {
 		return m.handleKeyVim(msg, pending)
 	}
@@ -102,6 +108,33 @@ func (m AppModel) handleBackspace() (tea.Model, tea.Cmd) {
 		}
 	} else {
 		m.exitDetailView()
+	}
+	return m, nil
+}
+
+// handleHistoryKey drives the modal history overlay: navigation keys scroll
+// its viewport, Esc or the history key close it, Ctrl-C still quits, and every
+// other key is swallowed so it can't leak into the pane underneath.
+func (m AppModel) handleHistoryKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	keys := m.keys
+	switch {
+	case key.Matches(msg, keys.Quit):
+		return m, m.quitCmd()
+	case key.Matches(msg, keys.Cancel), key.Matches(msg, keys.History):
+		m.showHistory = false
+		return m, nil
+	case key.Matches(msg, keys.Up), key.Matches(msg, keys.DetailUp):
+		m.history.ScrollUp(scrollLines)
+	case key.Matches(msg, keys.Down), key.Matches(msg, keys.DetailDown):
+		m.history.ScrollDown(scrollLines)
+	case key.Matches(msg, keys.PageUp):
+		m.history.ScrollUp(m.height / 2)
+	case key.Matches(msg, keys.PageDn):
+		m.history.ScrollDown(m.height / 2)
+	case key.Matches(msg, keys.Home):
+		m.history.ScrollToTop()
+	case key.Matches(msg, keys.End):
+		m.history.ScrollToBottom()
 	}
 	return m, nil
 }
@@ -322,6 +355,8 @@ func (m *AppModel) resolveAction(msg tea.KeyPressMsg) Action {
 		return ActionSprint
 	case key.Matches(msg, keys.View):
 		return ActionView
+	case key.Matches(msg, keys.History):
+		return ActionHistory
 	default:
 		return ActionNone
 	}

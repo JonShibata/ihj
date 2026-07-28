@@ -42,8 +42,12 @@ type Provider struct {
 	nameToID map[string]string // "fieldKey:valueName" → "valueID" for payload construction
 }
 
-// Compile-time check that *Provider implements core.Provider.
-var _ core.Provider = (*Provider)(nil)
+// Compile-time check that *Provider implements core.Provider and the
+// optional history capability the TUI's history overlay relies on.
+var (
+	_ core.Provider       = (*Provider)(nil)
+	_ core.HistoryFetcher = (*Provider)(nil)
+)
 
 // NewProvider creates a Jira provider for the given workspace.
 // The workspace's ProviderConfig must already be a *jira.Config
@@ -108,6 +112,38 @@ func (p *Provider) Get(ctx context.Context, id string) (*core.WorkItem, error) {
 		return nil, fmt.Errorf("fetching issue %s: %w", id, err)
 	}
 	return issueToWorkItem(iss, p.wellKnown, p.customFieldMap(), p.ws.CommentLimit), nil
+}
+
+// FetchHistory implements core.HistoryFetcher. It returns the issue's change
+// history newest-first, with each Jira changelog entry mapped to a
+// core.HistoryEntry. Entries carrying no field changes are dropped.
+func (p *Provider) FetchHistory(ctx context.Context, id string) ([]core.HistoryEntry, error) {
+	raw, err := p.client.FetchIssueChangelog(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("fetching history for %s: %w", id, err)
+	}
+	entries := make([]core.HistoryEntry, 0, len(raw))
+	// Jira returns oldest-first; iterate in reverse for newest-first display.
+	for i := len(raw) - 1; i >= 0; i-- {
+		e := raw[i]
+		changes := make([]core.HistoryChange, 0, len(e.Items))
+		for _, it := range e.Items {
+			changes = append(changes, core.HistoryChange{
+				Field: it.Field,
+				From:  it.FromString,
+				To:    it.ToString,
+			})
+		}
+		if len(changes) == 0 {
+			continue
+		}
+		entries = append(entries, core.HistoryEntry{
+			Author:  e.Author.DisplayNameOrDefault("Unknown"),
+			Created: formatDateTime(e.Created),
+			Changes: changes,
+		})
+	}
+	return entries, nil
 }
 
 // Create persists a new work item and returns its assigned key.

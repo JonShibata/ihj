@@ -61,8 +61,11 @@ When the detail pane is focused (via Tab or Enter), `Up`/`Down` scroll the detai
 | `Alt+W`  | Switch workspace                   |
 | `Alt+S`  | Assign to sprint                   |
 | `Alt+V`  | View issue via external command (see [view_command](#external-viewer)) |
+| `Alt+H`  | Show change history (scrollable overlay) |
 | `Alt+R`  | Refresh data                       |
 | `Alt+/`  | Show help overlay                  |
+
+The history overlay fetches the issue's changelog on demand and shows each change newest-first. Scroll with `Up`/`Down` and `PgUp`/`PgDn`; press `Alt+H` again or `Esc` to close.
 
 ### Search
 
@@ -94,6 +97,7 @@ Single-character keys for actions and navigation:
 | `w`   | Switch workspace                   |
 | `s`   | Assign to sprint                   |
 | `v`   | View issue via external command    |
+| `h`   | Show change history                |
 | `r`   | Refresh data                       |
 | `/`   | Enter search mode                  |
 | `:`   | Enter command mode                 |
@@ -133,7 +137,7 @@ shortcuts:
   branch: "ctrl+b"
 ```
 
-Available actions: `refresh`, `filter`, `workspace`, `sprint`, `view`, `edit`, `new`, `transition`, `assign`, `comment`, `open`, `branch`, `extract`.
+Available actions: `refresh`, `filter`, `workspace`, `sprint`, `view`, `history`, `edit`, `new`, `transition`, `assign`, `comment`, `open`, `branch`, `extract`.
 
 ## External viewer
 

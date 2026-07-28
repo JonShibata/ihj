@@ -270,6 +270,23 @@ func (s *State) AppendComment(key string, authorID string, adfBody any) error {
 	return nil
 }
 
+// AppendChangelog adds a history entry (oldest-first) to an issue.
+func (s *State) AppendChangelog(key, authorID string, created time.Time, items ...entChangelogItem) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	iss, ok := s.issues[key]
+	if !ok {
+		return fmt.Errorf("issue %s not found", key)
+	}
+	iss.Changelog = append(iss.Changelog, entChangelog{
+		ID:       fmt.Sprintf("%d", len(iss.Changelog)+1),
+		AuthorID: authorID,
+		Created:  created,
+		Items:    items,
+	})
+	return nil
+}
+
 // ── Wire conversions ─────────────────────────────────────────────────────
 
 func (s *State) toWireUser(id string) *wireUser {

@@ -22,6 +22,16 @@ const (
 	toastInsetBottom = 3
 	// toastInsetRight is the column offset from the right edge for the toast notification.
 	toastInsetRight = 4
+
+	// History overlay geometry. The overlay is a large centered box; these
+	// govern the margin around it and the frame/chrome the viewport must
+	// subtract to fit inside.
+	historyOverlayMarginX     = 6   // columns of empty space each side
+	historyOverlayMarginY     = 3   // rows of empty space top and bottom
+	historyOverlayMaxContentW = 100 // cap so the box isn't unreadably wide
+	historyBoxFrameW          = 6   // rounded border (2) + horizontal padding (4)
+	historyBoxFrameH          = 4   // rounded border (2) + vertical padding (2)
+	historyChromeLines        = 4   // title + blank + blank + close-hint
 )
 
 // ── Compositor ──────────────────────────────────────────────────
@@ -121,6 +131,65 @@ func (m *AppModel) renderHelpBox(theme *terminal.Theme) string {
 		BorderForeground(theme.Muted).
 		Padding(0, 2).
 		Render(buf.String())
+}
+
+// ── History overlay ─────────────────────────────────────────────
+
+// historyContentDims returns the (width, height) of the history viewport so
+// it fits inside a centered box with the configured margins, frame, and
+// chrome. Clamped to sane minimums for tiny terminals.
+func (m *AppModel) historyContentDims() (int, int) {
+	contentW := m.width - 2*historyOverlayMarginX - historyBoxFrameW
+	if contentW > historyOverlayMaxContentW {
+		contentW = historyOverlayMaxContentW
+	}
+	if contentW < 20 {
+		contentW = 20
+	}
+	vpH := m.height - 2*historyOverlayMarginY - historyBoxFrameH - historyChromeLines
+	if vpH < 3 {
+		vpH = 3
+	}
+	return contentW, vpH
+}
+
+// recalcHistorySize propagates the current overlay dimensions to the history
+// viewport. Called when the overlay opens and on every render (idempotent).
+func (m *AppModel) recalcHistorySize() {
+	w, h := m.historyContentDims()
+	m.history.SetSize(w, h)
+}
+
+// overlayHistory composites the scrollable change-history box centered on the
+// screen, with a title and a close hint.
+func (m *AppModel) overlayHistory(base string) string {
+	theme := m.styles.Theme()
+	m.recalcHistorySize()
+
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(theme.Accent)
+	hintStyle := lipgloss.NewStyle().Faint(true).Italic(true)
+
+	title := titleStyle.Render(core.IconRefresh + "HISTORY " + core.GlyphChevron + " " + m.history.IssueID())
+	hint := hintStyle.Render(m.keys.History.Help().Key + "/Esc close  " + core.GlyphDot + "  " +
+		core.GlyphArrowUp + "/" + core.GlyphArrowDown + " scroll")
+
+	// The viewport content is already wrapped/padded to the content width, so
+	// the box just fits itself around it — setting an explicit Width here would
+	// re-wrap and clip those lines.
+	inner := lipgloss.JoinVertical(lipgloss.Left, title, "", m.history.View(), "", hint)
+
+	box := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(theme.Muted).
+		Padding(1, 2).
+		Render(inner)
+
+	boxLines := strings.Split(box, "\n")
+	boxHeight := len(boxLines)
+	boxWidth := lipgloss.Width(boxLines[0])
+	offsetY := max(0, (m.height-boxHeight)/2)
+	offsetX := max(0, (m.width-boxWidth)/2)
+	return CompositeOverlay(base, box, offsetX, offsetY)
 }
 
 // ── Toast overlay ───────────────────────────────────────────────

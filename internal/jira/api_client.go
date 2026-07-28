@@ -67,6 +67,7 @@ type API interface {
 	AddToSprint(ctx context.Context, sprintID int, issueKeys []string) error
 	MoveToBacklog(ctx context.Context, issueKeys []string) error
 	FetchIssue(ctx context.Context, issueKey string) (*issue, error)
+	FetchIssueChangelog(ctx context.Context, issueKey string) ([]changelogEntry, error)
 	FetchBoardConfig(ctx context.Context, boardID int) (*boardConfiguration, error)
 	FetchFilter(ctx context.Context, filterID string) (*jiraFilter, error)
 	FetchFields(ctx context.Context) ([]fieldDefinition, error)
@@ -191,6 +192,34 @@ func (c *Client) FetchIssue(ctx context.Context, issueKey string) (*issue, error
 		return nil, err
 	}
 	return &iss, nil
+}
+
+// changelogMaxPages bounds pagination so a pathological history can't spin
+// the fetch indefinitely. At 100 entries/page this covers 1000 change events.
+const changelogMaxPages = 10
+
+// FetchIssueChangelog returns an issue's full change history (oldest-first),
+// paginating through GET /rest/api/3/issue/{key}/changelog until exhausted
+// or the page cap is hit.
+func (c *Client) FetchIssueChangelog(ctx context.Context, issueKey string) ([]changelogEntry, error) {
+	var entries []changelogEntry
+	startAt := 0
+	for page := 0; page < changelogMaxPages; page++ {
+		var resp changelogPage
+		path := fmt.Sprintf("/rest/api/3/issue/%s/changelog?startAt=%d", issueKey, startAt)
+		if err := c.get(ctx, path, &resp); err != nil {
+			return nil, err
+		}
+		entries = append(entries, resp.Values...)
+		if resp.IsLast || len(resp.Values) == 0 {
+			break
+		}
+		startAt += len(resp.Values)
+		if resp.Total > 0 && startAt >= resp.Total {
+			break
+		}
+	}
+	return entries, nil
 }
 
 func (c *Client) FetchActiveSprint(ctx context.Context, boardID int) (*sprint, error) {

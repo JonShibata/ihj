@@ -425,6 +425,14 @@ func Seed(s *State) {
 	_ = s.AppendComment(epicAuth.Key, "sarah", adfDoc("Kicked off — PKCE flow is on track for sprint end."))
 	_ = s.AppendComment(epicAuth.Key, "alex", adfDoc("Redirect handler landed behind a feature flag. Tests green."))
 	_ = s.AppendComment(epicBill.Key, "riley", adfDoc("Metering pipeline is the critical path; aligning with infra."))
+
+	// Change history (oldest-first) on an issue so the history overlay has
+	// something to show.
+	_ = s.AppendChangelog(epicAuth.Key, "sarah", daysAgo(5),
+		entChangelogItem{Field: "status", FromString: "To Do", ToString: "In Progress"})
+	_ = s.AppendChangelog(epicAuth.Key, "alex", daysAgo(2),
+		entChangelogItem{Field: "assignee", FromString: "", ToString: "Alex Rivera"},
+		entChangelogItem{Field: "priority", FromString: "Medium", ToString: "High"})
 }
 
 // SeedKanban populates a kanban-style OPS project — no sprints, a

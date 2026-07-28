@@ -33,7 +33,7 @@ See [TUI documentation](tui.md) for details on focus mode, pane focus, and vim m
 
 Default-mode action keys can be remapped. Ignored when `vim_mode` is enabled. Keys must include a modifier (`alt`, `ctrl`, `super`, or `hyper`) to avoid conflicting with search input.
 
-Available actions: `refresh`, `filter`, `assign`, `transition`, `open`, `edit`, `comment`, `branch`, `extract`, `new`, `workspace`.
+Available actions: `refresh`, `filter`, `assign`, `transition`, `open`, `edit`, `comment`, `branch`, `extract`, `new`, `workspace`, `sprint`, `view`, `history`.
 
 ```yaml
 shortcuts:

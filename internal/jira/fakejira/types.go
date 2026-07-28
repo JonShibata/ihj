@@ -77,6 +77,27 @@ type wireSprintRef struct {
 	State string `json:"state"`
 }
 
+type wireChangelogItem struct {
+	Field      string `json:"field"`
+	FromString string `json:"fromString"`
+	ToString   string `json:"toString"`
+}
+
+type wireChangelogEntry struct {
+	ID      string              `json:"id"`
+	Author  *wireUser           `json:"author"`
+	Created string              `json:"created"`
+	Items   []wireChangelogItem `json:"items"`
+}
+
+type wireChangelogPage struct {
+	Values     []wireChangelogEntry `json:"values"`
+	MaxResults int                  `json:"maxResults"`
+	Total      int                  `json:"total"`
+	StartAt    int                  `json:"startAt"`
+	IsLast     bool                 `json:"isLast"`
+}
+
 type wireIssue struct {
 	Key    string                     `json:"key"`
 	ID     string                     `json:"id"`
