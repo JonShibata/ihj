@@ -694,25 +694,22 @@ func TestDetailView_TypeSpecificFieldsDoNotLeakAcrossTypes(t *testing.T) {
 	}
 }
 
-func TestDetailView_UnpinnedCustomFieldsHidden(t *testing.T) {
-	// Unpinned RoleCustom fields should not render in the detail view,
-	// even when the issue has a value. This prevents noise from Jira
+func TestDetailView_UnpinnedScalarCustomFieldsHidden(t *testing.T) {
+	// Unpinned RoleCustom *scalar* fields should not render in the detail
+	// view, even when the issue has a value. This prevents noise from Jira
 	// custom fields that createmeta reports on all types with default content.
+	// (Rich-text fields are treated differently — see
+	// TestDetailView_UnpinnedRichTextFieldsShownWhenPopulated.)
 	unpinnedScalar := core.FieldDef{
 		Key: "p20", Label: "P20", Type: core.FieldString, Role: core.RoleCustom,
 		// Pinned: false — not opted in
 	}
-	unpinnedRichText := core.FieldDef{
-		Key: "rnd_credits", Label: "R&D Credits", Type: core.FieldRichText, Role: core.RoleCustom,
-	}
 
-	rndNode, _ := document.ParseMarkdownString("Default template content")
 	registry := map[string]*core.WorkItem{
 		"T-1": {
 			ID: "T-1", Summary: "A Task", Type: "Task", Status: "To Do",
 			Fields: map[string]any{
-				"p20":         "42",
-				"rnd_credits": rndNode,
+				"p20": "42",
 			},
 		},
 	}
@@ -720,7 +717,7 @@ func TestDetailView_UnpinnedCustomFieldsHidden(t *testing.T) {
 
 	ws := testutil.TestWorkspace()
 	if tc := ws.TypeByName("Task"); tc != nil {
-		tc.Fields = append(tc.Fields, unpinnedScalar, unpinnedRichText)
+		tc.Fields = append(tc.Fields, unpinnedScalar)
 	}
 
 	theme := terminal.DefaultTheme(true)
@@ -735,8 +732,67 @@ func TestDetailView_UnpinnedCustomFieldsHidden(t *testing.T) {
 	if strings.Contains(view, "P20") {
 		t.Error("unpinned scalar custom field P20 should not render")
 	}
+}
+
+func TestDetailView_UnpinnedRichTextFieldsShownWhenPopulated(t *testing.T) {
+	// Unpinned RoleCustom rich-text fields render whenever they have content —
+	// e.g. Success Criteria and Steps to Reproduce surface automatically
+	// without being pinned. Empty rich-text fields still stay hidden.
+	successCriteria := core.FieldDef{
+		Key: "success_criteria", Label: "Success Criteria",
+		Type: core.FieldRichText, Role: core.RoleCustom, // not pinned
+	}
+	stepsToReproduce := core.FieldDef{
+		Key: "steps_to_reproduce", Label: "Steps to Reproduce",
+		Type: core.FieldRichText, Role: core.RoleCustom, // not pinned
+	}
+	emptyRichText := core.FieldDef{
+		Key: "rnd_credits", Label: "R&D Credits",
+		Type: core.FieldRichText, Role: core.RoleCustom, // not pinned, no content
+	}
+
+	scNode, _ := document.ParseMarkdownString("- Latency under 200ms")
+	stepsNode, _ := document.ParseMarkdownString("1. Open the login page")
+	registry := map[string]*core.WorkItem{
+		"T-1": {
+			ID: "T-1", Summary: "A Task", Type: "Task", Status: "To Do",
+			Fields: map[string]any{
+				"success_criteria":   scNode,
+				"steps_to_reproduce": stepsNode,
+				// rnd_credits absent — no content
+			},
+		},
+	}
+	core.LinkChildren(registry)
+
+	ws := testutil.TestWorkspace()
+	if tc := ws.TypeByName("Task"); tc != nil {
+		tc.Fields = append(tc.Fields, successCriteria, stepsToReproduce, emptyRichText)
+	}
+
+	theme := terminal.DefaultTheme(true)
+	styles := terminal.NewStyles(theme, nil, "")
+	keys := terminal.DefaultKeyMap()
+	dm := tui.NewDetailModel(styles, registry, ws, keys)
+	dm.SetSize(120, 40)
+	dm.SetIssue(registry["T-1"])
+
+	view := stripANSI(dm.View())
+
+	if !strings.Contains(view, "SUCCESS CRITERIA") {
+		t.Error("populated unpinned rich-text field Success Criteria should render")
+	}
+	if !strings.Contains(view, "Latency under 200ms") {
+		t.Error("Success Criteria content should render")
+	}
+	if !strings.Contains(view, "STEPS TO REPRODUCE") {
+		t.Error("populated unpinned rich-text field Steps to Reproduce should render")
+	}
+	if !strings.Contains(view, "Open the login page") {
+		t.Error("Steps to Reproduce content should render")
+	}
 	if strings.Contains(view, "R&D CREDITS") {
-		t.Error("unpinned rich text custom field R&D Credits should not render")
+		t.Error("empty rich-text field R&D Credits should stay hidden")
 	}
 }
 

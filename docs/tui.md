@@ -12,8 +12,9 @@ The detail pane displays the selected issue's metadata in sections:
 - **Iteration** — sprint name (scrum boards only, shown when populated).
 - **Categorisation** — labels, components (shown when populated).
 - **Parent** — parent issue link (shown when set).
-- **FIELDS** — custom and dynamic fields discovered from the provider. Auto-discovered fields only appear when they have a value. Pinned fields (configured via `fields` on the issue type) always appear, with an em dash if empty.
+- **FIELDS** — scalar custom and dynamic fields discovered from the provider. Pinned fields (configured via `fields` on the issue type) always appear, with an em dash if empty; unpinned scalar fields are hidden to avoid noise from fields Jira reports broadly across types.
 - **Description** — rendered Markdown from the issue body.
+- **Rich-text fields** — long-form custom fields (e.g. Success Criteria, Steps to Reproduce) render as their own full-width blocks below the description whenever they contain content — pinned or not. Empty ones stay hidden.
 - **Child issues** — direct children with hint keys for navigation.
 - **Related issues** — non-hierarchical links (parent, blocks, blocked by, siblings sharing the same parent, relates to). Every link gets a hint key. Targets in the current filter view navigate instantly; targets outside the view trigger a `Provider.Get` and the detail pane jumps to them when they arrive (a transient "Loading X…" notice covers the latency).
 - **Comments** — the most recent comments (the last three by default; configurable via `comment_limit`, where `0` shows all). See [config.md](config.md).

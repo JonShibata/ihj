@@ -186,7 +186,7 @@ statuses:
 ihj automatically discovers custom fields from Jira's createmeta API at two levels:
 
 - **At bootstrap time** — `ihj jira bootstrap` queries createmeta for every issue type in the project, discovers available custom fields, and writes them into the config. Fields present on all types are promoted to the workspace-level `fields` block; fields unique to a single type go into that type's `fields` block.
-- **At runtime** — the provider re-checks createmeta (cached for 24 hours) to discover field metadata like allowed values, required flags, and rich text schemas. Fields that are **required** for a given issue type are included in the editor frontmatter and JSON schema. All discovered custom fields appear in the TUI detail pane's **FIELDS** section when they have a value.
+- **At runtime** — the provider re-checks createmeta (cached for 24 hours) to discover field metadata like allowed values, required flags, and rich text schemas. Fields that are **required** for a given issue type are included in the editor frontmatter and JSON schema. In the TUI detail pane, discovered **rich-text** fields (e.g. Success Criteria, Steps to Reproduce) render as full-width blocks whenever they have content, pinned or not; discovered **scalar** fields are shown only when pinned (see [per-type pinned fields](#per-type-pinned-fields)).
 
 Sprint is detected automatically on scrum boards and displayed with its actual name in the TUI detail pane (e.g. "Sprint 3"). No configuration is needed.
 

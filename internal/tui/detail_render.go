@@ -501,18 +501,17 @@ func (m *DetailModel) renderComments(buf *strings.Builder, divider string, wrapW
 
 // ── Rich-text blocks ────────────────────────────────────────────────
 
-// renderRichTextBlocks emits each rich-text custom field as a divider-separated,
-// full-width ANSI block with a section header. Fields that are unset or produce
-// empty output are skipped. Only pinned custom fields are shown — unpinned
-// createmeta fields are noise.
+// renderRichTextBlocks emits each rich-text field (custom or system) as a
+// divider-separated, full-width ANSI block with a section header. A block is
+// emitted only when the field actually has content — fields that are unset or
+// produce empty output are skipped. This means populated custom fields such as
+// "Success Criteria" or "Steps to Reproduce" surface automatically, without
+// needing to be pinned; empty ones stay hidden, so there's no noise.
 func (m *DetailModel) renderRichTextBlocks(buf *strings.Builder, divider string, wrapWidth int) {
 	issue := m.issue
 	styles := m.styles
 	for _, def := range m.issueFieldDefs() {
 		if def.Type != core.FieldRichText {
-			continue
-		}
-		if def.Role == core.RoleCustom && !def.Pinned {
 			continue
 		}
 		node := issue.RichTextField(def.Key)
