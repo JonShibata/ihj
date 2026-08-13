@@ -42,7 +42,15 @@ var defaultStyleConfig = ansi.StyleConfig{
 		Margin: uintPtr(0),
 	},
 	BlockQuote: ansi.StyleBlock{
-		Indent:      uintPtr(1),
+		// Reserve the quote prefix as a *margin*, not an indent. Glamour's
+		// wrap budget (BlockStack.Width) subtracts Indent once but Margin
+		// twice, while both render the IndentToken once. The token "│ " is
+		// two cells wide, so Indent:1 under-reserves by one cell per nesting
+		// level — an ancestor block then re-wraps the buffer and the spilled
+		// word lands on a fresh line with no "│" prefix. Margin:1 reserves
+		// the two cells the token actually occupies, so quoted lines wrap
+		// within the content width and every line keeps its prefix.
+		Margin:      uintPtr(1),
 		IndentToken: stringPtr("│ "),
 	},
 	List: ansi.StyleList{

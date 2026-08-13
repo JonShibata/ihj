@@ -701,15 +701,17 @@ func TestProvider_ContentRenderer_UnknownNodes(t *testing.T) {
 	provider, _ := newTestProvider(t, handler)
 	renderer := provider.ContentRenderer()
 
-	// "panel" is an unknown node type — children should be preserved.
+	// A node type ihj doesn't recognise, carrying block-level content. Its
+	// children must be preserved AND must actually render — wrapping block
+	// content in a paragraph would drop it (the bug that hid ADF `expand`).
 	adfJSON := json.RawMessage(`{
 		"version": 1,
 		"type": "doc",
 		"content": [{
-			"type": "panel",
+			"type": "someUnknownNode",
 			"content": [{
 				"type": "paragraph",
-				"content": [{"type": "text", "text": "inside panel"}]
+				"content": [{"type": "text", "text": "inside unknown"}]
 			}]
 		}]
 	}`)
@@ -721,28 +723,14 @@ func TestProvider_ContentRenderer_UnknownNodes(t *testing.T) {
 	if len(node.Children) == 0 {
 		t.Fatal("doc has no children; want wrapper for unknown node")
 	}
-	// Unknown nodes are converted to paragraphs preserving child text.
+	// Unknown nodes with block children become a blockquote callout so their
+	// content survives rendering rather than being silently swallowed.
 	p := node.Children[0]
-	if p.Type != document.NodeParagraph {
-		t.Errorf("Children[0].Type = %v; want NodeParagraph (wrapper for unknown)", p.Type)
+	if p.Type != document.NodeBlockquote {
+		t.Errorf("Children[0].Type = %v; want NodeBlockquote (callout for unknown)", p.Type)
 	}
-	if len(p.Children) == 0 {
-		t.Fatal("wrapped paragraph has no children")
-	}
-	// The inner paragraph's children should contain the text.
-	found := false
-	var walk func(n *document.Node)
-	walk = func(n *document.Node) {
-		if n.Text == "inside panel" {
-			found = true
-		}
-		for _, c := range n.Children {
-			walk(c)
-		}
-	}
-	walk(p)
-	if !found {
-		t.Error("text \"inside panel\" not found in parsed unknown node children")
+	if md := document.RenderMarkdown(node); !strings.Contains(md, "inside unknown") {
+		t.Errorf("unknown node dropped its content on render\n---\n%s", md)
 	}
 }
 

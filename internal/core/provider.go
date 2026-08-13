@@ -189,6 +189,12 @@ type Changes struct {
 	// Provider converts to native format via ContentRenderer.
 	Description *document.Node
 
+	// DescriptionOriginal is the provider-native original payload for the
+	// description (opaque, e.g. Jira ADF JSON). Set only when Description
+	// changes, so the provider can preserve untouched blocks verbatim instead
+	// of regenerating the whole field from the lossy Markdown round-trip.
+	DescriptionOriginal any
+
 	// Backend-specific field changes (priority, parent, sprint, etc.)
 	Fields map[string]any
 }

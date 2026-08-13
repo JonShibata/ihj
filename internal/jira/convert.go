@@ -60,9 +60,11 @@ func issuesToWorkItems(issues []issue, wk wellKnownFields, customFields map[stri
 			DisplayFields: displayFields,
 		}
 
-		// Parse ADF description into AST.
+		// Parse ADF description into AST, retaining the raw ADF so the write
+		// path can preserve untouched blocks verbatim (block-level reconcile).
 		if len(f.Description) > 0 && string(f.Description) != "null" {
 			item.Description, _ = parseADF(f.Description)
+			item.DescriptionSource = f.Description
 		}
 
 		// Parse the most recent comments, keeping at most commentLimit

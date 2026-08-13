@@ -44,6 +44,12 @@ type WorkItem struct {
 	// Manifest serialization lives in the encoding package.
 	Description *document.Node `json:"-" yaml:"-"`
 
+	// DescriptionSource carries the provider-native original rich-text payload
+	// for the description (e.g. Jira ADF JSON), opaque to core. Providers set
+	// it on read; the write path uses it to preserve untouched blocks verbatim
+	// rather than regenerating the whole field from lossy Markdown.
+	DescriptionSource any `json:"-" yaml:"-"`
+
 	// Comments on this work item.
 	Comments []Comment `json:"-" yaml:"-"`
 

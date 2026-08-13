@@ -210,7 +210,7 @@ func (p *Provider) Update(ctx context.Context, id string, changes *core.Changes)
 	}
 
 	if changes.Description != nil {
-		fields["description"] = renderADFValue(changes.Description)
+		fields["description"] = descriptionADF(changes)
 	}
 
 	tx, err := p.wellKnown.TranslateFields(p, ctx, changes.Fields)

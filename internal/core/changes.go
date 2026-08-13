@@ -74,6 +74,9 @@ func ComputeChanges(orig, edited *WorkItem, set FieldPresence, defs FieldDefs) (
 			} else {
 				ch.Description = edited.Description
 			}
+			// Carry the original native payload so the provider can preserve
+			// untouched blocks verbatim on write.
+			ch.DescriptionOriginal = orig.DescriptionSource
 			hasChange = true
 		}
 	}
