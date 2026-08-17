@@ -39,9 +39,19 @@ type DetailModel struct {
 	// Attachments rendered in the ATTACHMENTS section. Hint keys for
 	// these begin AFTER children + related (single shared keymap pool).
 	attachmentTargets []core.Attachment
+	// Web link URLs found in the rendered issue (description, rich-text
+	// fields, comments), deduped in first-seen order. Hint keys for these
+	// begin AFTER children + related + attachments (single shared keymap
+	// pool). Pressing one opens the URL in the system browser. The hint
+	// label is drawn inline right after each link rather than in a section.
+	webLinkTargets []string
+	// linkLabels maps each web link URL to its hint label, so the rich-text
+	// renderers can splice the label in beside the link. Rebuilt each
+	// rebuildContent from webLinkTargets and hintLabels.
+	linkLabels map[string]string
 	// Available hint labels for navigation, regenerated each rebuildContent
-	// based on the total slot count (children + related + attachments).
-	// All labels share the same length — see KeyMap.Hints.
+	// based on the total slot count (children + related + attachments +
+	// web links). All labels share the same length (see KeyMap.Hints).
 	hintLabels []string
 }
 
@@ -246,6 +256,27 @@ func (m *DetailModel) NavAttachmentForKey(s string) *core.Attachment {
 		return nil
 	}
 	return nil
+}
+
+// NavWebLinkForKey returns the web link URL associated with a hint label,
+// or "". Hints for web links come AFTER children + related + attachments,
+// so callers should try the child/link/attachment resolvers first.
+func (m *DetailModel) NavWebLinkForKey(s string) string {
+	for i, hint := range m.hintLabels {
+		if hint != s {
+			continue
+		}
+		base := len(m.sortedChildren) + len(m.relatedHintIDs) + len(m.attachmentTargets)
+		if i < base {
+			return ""
+		}
+		j := i - base
+		if j < len(m.webLinkTargets) {
+			return m.webLinkTargets[j]
+		}
+		return ""
+	}
+	return ""
 }
 
 // Breadcrumb returns a display string showing the navigation path.

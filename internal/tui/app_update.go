@@ -149,6 +149,13 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 
+	// While a background command is running it owns input even between its
+	// popups (see handleKeyPress); don't leak fall-through messages such as a
+	// pasteMsg into the list underneath.
+	if m.commandRunning {
+		return m, nil
+	}
+
 	// Pass through to list (search input etc).
 	var cmd tea.Cmd
 	previousCursor := m.list.cursor
@@ -189,6 +196,23 @@ func (m AppModel) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m.handlePopupResult(result)
 		}
 		return m, cmd
+	}
+	// A running background command owns all input, not just the moments a
+	// popup happens to be on screen. Multi-step workflows (e.g. a bug
+	// close-out: pick status → Resolution → Root Cause) drive a sequence of
+	// bridge popups from a goroutine, and between them there's a window where
+	// the previous popup has closed but the next bridgeXxxMsg hasn't been
+	// processed yet (the goroutine is doing a network round-trip or preparing
+	// the next prompt). program.Send is async, so a keystroke typed in that
+	// window would otherwise reach the main handler and leak into
+	// search/navigation/actions — dropping the workflow or firing an action
+	// like Edit. Swallow those keys until the next popup arrives; keep Ctrl+C
+	// as an escape hatch so a stuck command can still be quit.
+	if m.commandRunning {
+		if msg.String() == "ctrl+c" {
+			return m, m.quitCmd()
+		}
+		return m, nil
 	}
 	return m.handleKey(msg)
 }
@@ -428,13 +452,26 @@ func (m AppModel) handleDataReloaded(msg dataReloadedMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	previousIssue := m.detail.Issue()
+
 	m.filter = msg.filter
 	m.fetchedAt = msg.fetchedAt
 	m.registry = core.BuildRegistry(msg.items)
 	core.LinkChildren(m.registry)
 	m.list.Rebuild(m.registry)
 	m.detail.UpdateRegistry(m.registry)
-	m.syncDetail()
+
+	// UpdateRegistry already re-pointed the detail pane at the fresh copy of
+	// whatever issue it was showing, keyed by ID. That lookup doesn't care
+	// whether the issue still matches the list's active search text, so only
+	// fall back to the list's cursor-selected issue when nothing was shown
+	// before, or the issue is gone from the registry entirely. Otherwise an
+	// edit that drops the issue out of the current filter — e.g. renaming it
+	// so the title no longer matches the search box — would silently swap
+	// the detail pane to an unrelated issue.
+	if previousIssue == nil || m.registry[previousIssue.ID] == nil {
+		m.syncDetail()
+	}
 
 	if !msg.silent {
 		m.setNotify(fmt.Sprintf("Loaded %d issues (%s)", len(msg.items), strings.ToUpper(msg.filter)))

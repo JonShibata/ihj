@@ -171,6 +171,17 @@ func (m AppModel) executeOpen() (tea.Model, tea.Cmd, bool) {
 	return m, cmd, true
 }
 
+// openWebLink opens a web link's URL in the system browser. Driven by the
+// WEB LINKS section's hint keys (see DetailModel.NavWebLinkForKey).
+func (m AppModel) openWebLink(url string) tea.Cmd {
+	return func() tea.Msg {
+		if err := commands.OpenInBrowser(url); err != nil {
+			return notifyMsg{title: "Open failed", message: err.Error()}
+		}
+		return notifyMsg{title: "Opened", message: url}
+	}
+}
+
 // executeView suspends the TUI and runs the workspace's configured viewer
 // (e.g. mdcat with kitty graphics) so rich content like inline images can
 // be displayed without a Bubble Tea render. Falls back to a notify when

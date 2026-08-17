@@ -79,13 +79,27 @@ func (m *DetailModel) rebuildContent() {
 		strings.Repeat(core.GlyphHorizLine, min(contentWidth, maxDividerWidth)),
 	)
 
-	// Pre-count navigable slots (children + related + attachments) so we
-	// generate exactly the right number of hint labels. Past the single-char
-	// alphabet they roll over to 2-char.
-	totalSlots := len(m.issue.Children) +
+	// Pre-count navigable slots (children + related + attachments + web
+	// links) so we generate exactly the right number of hint labels. Past
+	// the single-char alphabet they roll over to 2-char. Web links are
+	// collected here (not just counted) because their count depends on the
+	// rich-text content, not a ready-made slice.
+	m.webLinkTargets = m.collectWebLinks()
+	linkBase := len(m.issue.Children) +
 		len(m.issue.Links) + len(siblingLinks(m.issue, m.registry)) +
 		len(m.issue.Attachments)
+	totalSlots := linkBase + len(m.webLinkTargets)
 	m.hintLabels = m.keys.Hints(totalSlots)
+
+	// Map each web link URL to its hint label so the rich-text renderers can
+	// draw the label inline next to the link. Web link labels come after the
+	// children/related/attachment slots in the shared pool.
+	m.linkLabels = make(map[string]string, len(m.webLinkTargets))
+	for i, url := range m.webLinkTargets {
+		if idx := linkBase + i; idx < len(m.hintLabels) {
+			m.linkLabels[url] = m.hintLabels[idx]
+		}
+	}
 
 	var buf strings.Builder
 	m.renderIdentityLine(&buf)
@@ -146,7 +160,7 @@ func (m *DetailModel) renderDescription(buf *strings.Builder, wrapWidth int) {
 		buf.WriteString(placeholder)
 		return
 	}
-	desc := strings.TrimSpace(document.RenderANSI(m.issue.Description, document.ANSIConfig{
+	desc := strings.TrimSpace(document.RenderANSI(m.annotateMedia(m.annotateLinks(m.issue.Description)), document.ANSIConfig{
 		WrapWidth: wrapWidth,
 		Style:     m.styles.ContentStyle,
 	}))
@@ -466,6 +480,163 @@ func (m *DetailModel) renderAttachmentsTable(buf *strings.Builder, divider strin
 	buf.WriteString(attTable.Render() + "\n")
 }
 
+// ── Web links ────────────────────────────────────────────────────────
+
+// collectWebLinks gathers external web-link URLs from everything rendered in
+// the detail pane: the description, every rich-text custom field, and the
+// visible comments, deduped in first-seen order. Each gets a hint label drawn
+// inline beside the link (see annotateLinks); pressing it opens the URL in the
+// system browser. Comments are included because link-bearing discussion
+// (design docs, PRs, mockups) is exactly where these URLs tend to live.
+func (m *DetailModel) collectWebLinks() []string {
+	if m.issue == nil {
+		return nil
+	}
+	var urls []string
+	urls = append(urls, document.Links(m.issue.Description)...)
+	for _, def := range m.issueFieldDefs() {
+		if def.Type != core.FieldRichText {
+			continue
+		}
+		urls = append(urls, document.Links(m.issue.RichTextField(def.Key))...)
+	}
+	for _, c := range m.issue.Comments {
+		urls = append(urls, document.Links(c.Body)...)
+	}
+	if len(urls) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(urls))
+	out := make([]string, 0, len(urls))
+	for _, u := range urls {
+		if _, dup := seen[u]; dup {
+			continue
+		}
+		seen[u] = struct{}{}
+		out = append(out, u)
+	}
+	return out
+}
+
+// annotateLinks returns a copy of n with a plain-text hint label spliced in
+// immediately after each web link, so the label renders inline beside the link
+// (e.g. "the design doc [7]"). The original AST is never mutated — the
+// description and rich-text fields are shared with the export and diff paths.
+// When the issue has no web links the node is returned unchanged.
+func (m *DetailModel) annotateLinks(n *document.Node) *document.Node {
+	if n == nil || len(m.linkLabels) == 0 {
+		return n
+	}
+	c := *n
+	if len(n.Children) == 0 {
+		return &c
+	}
+	kids := make([]*document.Node, 0, len(n.Children))
+	for i, child := range n.Children {
+		kids = append(kids, m.annotateLinks(child))
+
+		href, isLink := linkHref(child)
+		if !isLink {
+			continue
+		}
+		label, ok := m.linkLabels[href]
+		if !ok {
+			continue
+		}
+		// Emit the label only at the end of a contiguous run of nodes that
+		// share this href, so a link split across marks (bold, code) gets one
+		// label after its full text rather than one per fragment.
+		if i+1 < len(n.Children) {
+			if next, nextIsLink := linkHref(n.Children[i+1]); nextIsLink && next == href {
+				continue
+			}
+		}
+		kids = append(kids, document.NewText(" ["+label+"]"))
+	}
+	c.Children = kids
+	return &c
+}
+
+// annotateMedia returns a copy of n with each embedded image or file replaced by an inline
+// placeholder paragraph ("[image: name] [k]"), where k is the matching attachment's hint key.
+// The original AST is never mutated.
+func (m *DetailModel) annotateMedia(n *document.Node) *document.Node {
+	if n == nil {
+		return n
+	}
+	used := make(map[int]bool)
+	var walk func(n *document.Node) *document.Node
+	walk = func(n *document.Node) *document.Node {
+		if n.Type == document.NodeMedia {
+			if len(n.Children) > 0 {
+				// mediaSingle wrapper: the placeholder comes from its media child.
+				return walk(n.Children[0])
+			}
+			return m.mediaPlaceholder(n, used)
+		}
+		if len(n.Children) == 0 {
+			return n
+		}
+		c := *n
+		c.Children = make([]*document.Node, len(n.Children))
+		for i, child := range n.Children {
+			c.Children[i] = walk(child)
+		}
+		return &c
+	}
+	return walk(n)
+}
+
+// mediaPlaceholder builds the inline placeholder for one embedded media node. It pairs the node
+// with an attachment by filename, else with the next unused image attachment, in document order.
+func (m *DetailModel) mediaPlaceholder(n *document.Node, used map[int]bool) *document.Node {
+	atts := m.issue.Attachments
+	match := -1
+	for i, a := range atts {
+		if !used[i] && n.Alt != "" && a.Filename == n.Alt {
+			match = i
+			break
+		}
+	}
+	if match < 0 {
+		for i, a := range atts {
+			if !used[i] && strings.HasPrefix(a.MIMEType, "image/") {
+				match = i
+				break
+			}
+		}
+	}
+	name := n.Alt
+	if match >= 0 {
+		used[match] = true
+		name = atts[match].Filename
+	}
+	if name == "" {
+		name = "media"
+	}
+	text := "[image: " + name + "]"
+	if match >= 0 {
+		idx := len(m.issue.Children) + len(m.issue.Links) + len(siblingLinks(m.issue, m.registry)) + match
+		if idx < len(m.hintLabels) {
+			text += " [" + m.hintLabels[idx] + "]"
+		}
+	}
+	return document.NewParagraph(document.NewText(text))
+}
+
+// linkHref returns a text node's link href and whether it carries a link mark.
+func linkHref(n *document.Node) (string, bool) {
+	if n == nil || n.Type != document.NodeText {
+		return "", false
+	}
+	for _, mk := range n.Marks {
+		if mk.Type == document.MarkLink {
+			return mk.Attrs["href"], true
+		}
+	}
+	return "", false
+}
+
 // ── Comments ────────────────────────────────────────────────────────
 
 // renderComments writes the last N comments with author, date, and body.
@@ -490,7 +661,7 @@ func (m *DetailModel) renderComments(buf *strings.Builder, divider string, wrapW
 			styles.CommentDate.Render(core.GlyphDot+" "+comment.Created)
 		buf.WriteString(header + "\n")
 		if comment.Body != nil {
-			body := document.RenderANSI(comment.Body, document.ANSIConfig{
+			body := document.RenderANSI(m.annotateLinks(comment.Body), document.ANSIConfig{
 				WrapWidth: wrapWidth,
 				Style:     styles.ContentStyle,
 			})
@@ -518,7 +689,7 @@ func (m *DetailModel) renderRichTextBlocks(buf *strings.Builder, divider string,
 		if node == nil {
 			continue
 		}
-		body := strings.TrimSpace(document.RenderANSI(node, document.ANSIConfig{
+		body := strings.TrimSpace(document.RenderANSI(m.annotateLinks(node), document.ANSIConfig{
 			WrapWidth: wrapWidth,
 			Style:     styles.ContentStyle,
 		}))

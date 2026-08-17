@@ -1027,3 +1027,113 @@ func TestDetailNavTargetForKey_ChildrenBeforeRelated(t *testing.T) {
 		t.Errorf("second hint: want P-9, got %v", got)
 	}
 }
+
+func TestDetailView_WebLinkInlineHints(t *testing.T) {
+	// A description with two hyperlinks plus a rich-text custom field and a
+	// comment, each carrying a link. Every link gets a hint label drawn inline
+	// beside it (no separate section), deduped across all sources.
+	desc := document.NewDoc(document.NewParagraph(
+		document.NewText("See "),
+		document.NewStyledText("the runbook", document.Link("https://runbook.test/guide")),
+		document.NewText(" and "),
+		document.NewStyledText("the dashboard", document.Link("https://dash.test/panel")),
+	))
+	// The custom field repeats the runbook link (must dedupe) and adds a new one.
+	acNode := document.NewDoc(document.NewParagraph(
+		document.NewStyledText("runbook again", document.Link("https://runbook.test/guide")),
+		document.NewStyledText("tracker", document.Link("https://tracker.test/x")),
+	))
+
+	// A comment carries a fourth link (this is where design-doc / PR / mockup
+	// URLs commonly live), which must also get a hint.
+	commentBody := document.NewDoc(document.NewParagraph(
+		document.NewText("mockup: "),
+		document.NewStyledText("figma", document.Link("https://figma.test/file")),
+	))
+
+	registry := map[string]*core.WorkItem{
+		"WL-1": {
+			ID: "WL-1", Summary: "Has links", Type: "Story", Status: "Open",
+			Description: desc,
+			Fields:      map[string]any{"acceptance_criteria": acNode},
+			Comments:    []core.Comment{{Author: "Dev", Created: "today", Body: commentBody}},
+		},
+	}
+	core.LinkChildren(registry)
+
+	ws := testutil.TestWorkspace()
+	if tc := ws.TypeByName("Story"); tc != nil {
+		tc.Fields = append(tc.Fields, core.FieldDef{
+			Key: "acceptance_criteria", Label: "Acceptance Criteria",
+			Type: core.FieldRichText, Role: core.RoleCustom, Pinned: true,
+		})
+	}
+
+	theme := terminal.DefaultTheme(true)
+	styles := terminal.NewStyles(theme, nil, "")
+	keys := terminal.DefaultKeyMap()
+	dm := tui.NewDetailModel(styles, registry, ws, keys)
+	dm.SetSize(120, 40)
+	dm.SetIssue(registry["WL-1"])
+
+	view := stripANSI(dm.View())
+	// No separate section — hints live inline beside the links.
+	if strings.Contains(view, "WEB LINKS") {
+		t.Errorf("did not expect a WEB LINKS section header\n%s", view)
+	}
+
+	// No children/related/attachments → web links take the first hints, in
+	// first-seen order (description, then custom field, then comments),
+	// deduped.
+	hints := keys.Hints(4)
+	want := []string{"https://runbook.test/guide", "https://dash.test/panel", "https://tracker.test/x", "https://figma.test/file"}
+	for i, w := range want {
+		// The hint label is spliced inline beside its link.
+		marker := "[" + hints[i] + "]"
+		if !strings.Contains(view, marker) {
+			t.Errorf("inline hint %q missing from view\n%s", marker, view)
+		}
+		if got := dm.NavWebLinkForKey(hints[i]); got != w {
+			t.Errorf("NavWebLinkForKey(%q) = %q, want %q", hints[i], got, w)
+		}
+	}
+	// A label that matches no web link resolves to "".
+	if got := dm.NavWebLinkForKey("nope"); got != "" {
+		t.Errorf("NavWebLinkForKey(unknown) = %q, want empty", got)
+	}
+}
+
+func TestDetailView_WebLinkHintsFollowChildren(t *testing.T) {
+	// Web link hints continue the shared pool AFTER children (and related /
+	// attachments), so a child hint never collides with a web link hint.
+	desc := document.NewDoc(document.NewParagraph(
+		document.NewStyledText("link", document.Link("https://only.test/here")),
+	))
+	registry := map[string]*core.WorkItem{
+		"P-1": {ID: "P-1", Summary: "Parent", Type: "Epic", Status: "Open", Description: desc},
+		"C-1": {ID: "C-1", Summary: "Child 1", Type: "Story", Status: "Open", ParentID: "P-1"},
+		"C-2": {ID: "C-2", Summary: "Child 2", Type: "Story", Status: "Open", ParentID: "P-1"},
+	}
+	core.LinkChildren(registry)
+
+	theme := terminal.DefaultTheme(true)
+	styles := terminal.NewStyles(theme, nil, "")
+	keys := terminal.DefaultKeyMap()
+	dm := tui.NewDetailModel(styles, registry, testWS("mix"), keys)
+	dm.SetSize(120, 40)
+	dm.SetIssue(registry["P-1"])
+	_ = dm.View() // populate sortedChildren / webLinkTargets
+
+	// 2 children + 1 web link = 3 slots. hints[0..1] are children, hints[2]
+	// is the web link.
+	hints := keys.Hints(3)
+	if got := dm.NavTargetForKey(hints[0]); got == nil || got.ID != "C-1" {
+		t.Errorf("first hint: want child C-1, got %v", got)
+	}
+	if got := dm.NavWebLinkForKey(hints[0]); got != "" {
+		t.Errorf("child hint should not resolve as a web link, got %q", got)
+	}
+	if got := dm.NavWebLinkForKey(hints[2]); got != "https://only.test/here" {
+		t.Errorf("NavWebLinkForKey(hints[2]) = %q, want the web link URL", got)
+	}
+}

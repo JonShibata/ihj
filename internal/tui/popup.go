@@ -275,7 +275,9 @@ func (p *PopupModel) updateMultiSelect(msg tea.KeyPressMsg) (tea.Cmd, *PopupResu
 	keys := p.keys
 
 	switch {
-	case key.Matches(msg, keys.Cancel), key.Matches(msg, keys.Quit):
+	// Match Ctrl+C, not keys.Quit: in vim mode keys.Quit binds plain "q",
+	// which must stay typeable in the filter box (see updateInput).
+	case key.Matches(msg, keys.Cancel), msg.String() == "ctrl+c":
 		result := &PopupResult{ID: p.id, Index: -1, Canceled: true}
 		p.Close()
 		return nil, result
@@ -362,7 +364,11 @@ func (p *PopupModel) updateSelect(msg tea.KeyPressMsg) (tea.Cmd, *PopupResult) {
 		result := &PopupResult{ID: p.id, Index: p.cursor, Value: p.selectedValue(p.cursor)}
 		p.Close()
 		return nil, result
-	case key.Matches(msg, keys.Cancel), key.Matches(msg, keys.Quit):
+	// Match Ctrl+C, not keys.Quit: in vim mode keys.Quit binds plain "q",
+	// which can be a hint label here (hints draw from the full alphabet), so
+	// it must reach tryHintKeySelect rather than cancel the picker. Esc still
+	// cancels.
+	case key.Matches(msg, keys.Cancel), msg.String() == "ctrl+c":
 		result := &PopupResult{ID: p.id, Index: -1, Canceled: true}
 		p.Close()
 		return nil, result
@@ -435,7 +441,13 @@ func (p *PopupModel) updateInput(msg tea.KeyPressMsg) (tea.Cmd, *PopupResult) {
 	}
 
 	switch {
-	case key.Matches(msg, keys.Cancel), key.Matches(msg, keys.Quit):
+	// Esc / Ctrl+C cancel. We match Ctrl+C explicitly rather than keys.Quit:
+	// in vim mode keys.Quit also binds the plain letter "q", and this is a
+	// free-text field. A typed "q" (as in "request", "queue") must reach the
+	// textarea, not cancel the prompt — cancelling mid-word closed the popup
+	// and let the rest of the keystrokes leak to the main UI, where an "e"
+	// fired the Edit action.
+	case key.Matches(msg, keys.Cancel), msg.String() == "ctrl+c":
 		result := &PopupResult{ID: p.id, Canceled: true}
 		p.Close()
 		return nil, result

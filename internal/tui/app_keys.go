@@ -219,6 +219,10 @@ func (m *AppModel) tryChildNavigation(msg tea.KeyPressMsg, pending string) (bool
 		return true, m.viewAttachment(*att)
 	}
 
+	if url := m.detail.NavWebLinkForKey(candidate); url != "" {
+		return true, m.openWebLink(url)
+	}
+
 	id := m.detail.NavLinkIDForKey(candidate)
 	if id == "" {
 		return false, nil

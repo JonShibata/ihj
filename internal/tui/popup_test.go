@@ -336,3 +336,57 @@ func TestPopupInput_ViewContainsTitleAndPlaceholder(t *testing.T) {
 		t.Error("input popup should show the placeholder text when empty")
 	}
 }
+
+// newVimTestPopup builds a popup using the vim keymap, whose Quit binding
+// includes the plain letter "q".
+func newVimTestPopup() tui.PopupModel {
+	theme := terminal.DefaultTheme(true)
+	styles := terminal.NewStyles(theme, nil, "")
+	p := tui.NewPopupModel(styles, terminal.VimKeyMap())
+	p.SetSize(80, 30)
+	return p
+}
+
+// TestPopupInput_QDoesNotCancelInVimMode is the regression test for the bug
+// close-out defect: in vim mode keys.Quit binds "q", and the Root Cause text
+// box matched it before feeding the textarea, so typing a "q" cancelled the
+// prompt mid-word. The popup closed, the workflow dropped, and trailing
+// keystrokes leaked to the main UI (an "e" fired Edit).
+func TestPopupInput_QDoesNotCancelInVimMode(t *testing.T) {
+	p := newVimTestPopup()
+	p.ShowInput("bridge-input", "Root Cause", "")
+
+	for _, r := range "request queue" {
+		_, result := p.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
+		if result != nil {
+			t.Fatalf("typing %q returned result %+v; want nil — printable keys must reach the textarea", r, result)
+		}
+	}
+	if !p.Active() {
+		t.Fatal("popup closed while typing a 'q'; the vim Quit binding leaked into the text field")
+	}
+}
+
+// TestPopupInput_EscAndCtrlCStillCancel guards the escape hatches the fix must
+// preserve: Esc and Ctrl+C both cancel the prompt.
+func TestPopupInput_EscAndCtrlCStillCancel(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		key  tea.KeyPressMsg
+	}{
+		{"esc", bbEscKey()},
+		{"ctrl+c", bbCtrlKey('c')},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := newVimTestPopup()
+			p.ShowInput("bridge-input", "Root Cause", "")
+			_, result := p.Update(tc.key)
+			if result == nil || !result.Canceled {
+				t.Errorf("%s: result = %+v; want a canceled result", tc.name, result)
+			}
+			if p.Active() {
+				t.Errorf("%s: popup still active; want closed", tc.name)
+			}
+		})
+	}
+}

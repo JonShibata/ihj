@@ -17,6 +17,7 @@ The detail pane displays the selected issue's metadata in sections:
 - **Rich-text fields** — long-form custom fields (e.g. Success Criteria, Steps to Reproduce) render as their own full-width blocks below the description whenever they contain content — pinned or not. Empty ones stay hidden.
 - **Child issues** — direct children with hint keys for navigation.
 - **Related issues** — non-hierarchical links (parent, blocks, blocked by, siblings sharing the same parent, relates to). Every link gets a hint key. Targets in the current filter view navigate instantly; targets outside the view trigger a `Provider.Get` and the detail pane jumps to them when they arrive (a transient "Loading X…" notice covers the latency).
+- **Web links** — external http/https URLs found anywhere in the rendered issue (description, rich-text custom fields, and the visible comments) get a hint label drawn inline right beside the link, e.g. `the design doc [7]`. Links are deduped in first-seen order; pressing a link's hint opens the URL in the system browser.
 - **Comments** — the most recent comments (the last three by default; configurable via `comment_limit`, where `0` shows all). See [config.md](config.md).
 
 ## Layout
@@ -25,7 +26,7 @@ The detail pane displays the selected issue's metadata in sections:
 - **Tab** toggles keyboard focus between panes without changing the layout.
 - **Esc** exits focus mode, then clears search, then quits (in that priority order).
 
-When the detail pane is focused (via Tab or Enter), `Up`/`Down` scroll the detail content, hint keys (`0`-`9`, then `a`-`z`) navigate child and related issues (children first, then related), and `Backspace` pops back one level. All action keys work regardless of focus state.
+When the detail pane is focused (via Tab or Enter), `Up`/`Down` scroll the detail content and `Backspace` pops back one level. Hint keys (`0`-`9`, then `a`-`z`) reach every navigable slot in one shared pool: children and related issues (in their tables), attachments (in their table), and web links (labelled inline beside each link). Child and related hints drill into that issue; attachment hints open the file in a viewer; web link hints open the URL in the system browser. All action keys work regardless of focus state.
 
 ## Key Bindings (Default Mode)
 
@@ -40,7 +41,7 @@ When the detail pane is focused (via Tab or Enter), `Up`/`Down` scroll the detai
 | `Shift+Down` / `Ctrl+D` | Scroll detail down (from list focus)    |
 | `Enter`                 | Focus mode (full-screen detail)         |
 | `Tab`                   | Toggle focus between list / detail pane |
-| `0`-`9`, `a`-`z`        | Navigate to child issue by hint key     |
+| `0`-`9`, `a`-`z`        | Jump to child/related issue, attachment, or web link by hint key |
 | `Backspace`             | Go back (pop child history)             |
 | `Esc`                   | Exit focus / clear search / quit        |
 | `Ctrl+C`                | Quit                                    |
