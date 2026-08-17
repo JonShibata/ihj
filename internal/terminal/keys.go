@@ -88,11 +88,18 @@ func (k KeyMap) FullHelp() [][]key.Binding {
 
 // Hints returns n hint labels of uniform length. When n fits the
 // single-char alphabet (digits + letters not bound elsewhere) every label
-// is one character. Past that, every label is a two-character string drawn
-// from the letters-only subset of the alphabet — uniform length keeps the
-// input state machine trivial (always exactly hl chars per hint, where hl
-// is HintLabelLength). Two-char labels avoid digits because the number row
-// is awkward to reach twice in quick succession.
+// is one character. Past that, labels grow to a uniform multi-char width:
+// the smallest width whose alphabet can address all n slots. Uniform length
+// keeps the input state machine trivial (always exactly hl chars per hint,
+// where hl is HintLabelLength).
+//
+// Multi-char labels draw from the full alphabet, digits included, because
+// digits are already valid single-char hints and letting them into wider
+// labels lets width 2 cover hundreds of links before a third character is
+// ever needed. Within a width, digit-free labels are emitted first so the
+// common case stays letter-only (matching historical behavior); digit-bearing
+// labels are pulled in only when the letters alone cannot cover n. This is
+// unbounded: n links always get n labels, so nothing is left unreachable.
 func (k KeyMap) Hints(n int) []string {
 	alpha := k.HintKeys()
 	if n <= 0 || len(alpha) == 0 {
@@ -106,23 +113,91 @@ func (k KeyMap) Hints(n int) []string {
 		return out
 	}
 
-	// Overflow: 2-char labels using letters only.
+	// Overflow: split the alphabet into letters (preferred) and digits, then
+	// build a full alphabet with letters first so odometer order favors them.
 	letters := make([]rune, 0, len(alpha))
+	digits := make([]rune, 0, len(alpha))
 	for _, r := range alpha {
 		if r >= 'a' && r <= 'z' {
 			letters = append(letters, r)
+		} else {
+			digits = append(digits, r)
 		}
 	}
+	full := make([]rune, 0, len(letters)+len(digits))
+	full = append(full, letters...)
+	full = append(full, digits...)
+	if len(full) < 2 {
+		return nil // degenerate keymap: cannot build distinct multi-char labels
+	}
+
+	// Smallest label width whose full alphabet can address every slot.
+	width := 2
+	for pow(len(full), width) < n {
+		width++
+	}
+
 	out := make([]string, 0, n)
-	for _, c1 := range letters {
-		for _, c2 := range letters {
-			out = append(out, string([]rune{c1, c2}))
-			if len(out) == n {
-				return out
-			}
+	// Phase 1: digit-free labels of this width, in odometer order.
+	eachCombo(letters, width, func(s string) bool {
+		out = append(out, s)
+		return len(out) < n
+	})
+	if len(out) < n {
+		// Phase 2: fill the remainder with digit-bearing labels of the same
+		// width, skipping the digit-free labels already emitted in phase 1.
+		seen := make(map[string]struct{}, len(out))
+		for _, s := range out {
+			seen[s] = struct{}{}
 		}
+		eachCombo(full, width, func(s string) bool {
+			if _, dup := seen[s]; !dup {
+				out = append(out, s)
+			}
+			return len(out) < n
+		})
 	}
 	return out
+}
+
+// eachCombo calls fn for every width-length label drawn from alpha, in
+// odometer order (first position most significant), until fn returns false or
+// all combinations are exhausted.
+func eachCombo(alpha []rune, width int, fn func(string) bool) {
+	if len(alpha) == 0 || width <= 0 {
+		return
+	}
+	idx := make([]int, width)
+	buf := make([]rune, width)
+	for {
+		for p := 0; p < width; p++ {
+			buf[p] = alpha[idx[p]]
+		}
+		if !fn(string(buf)) {
+			return
+		}
+		// Increment the odometer, least-significant position last.
+		p := width - 1
+		for ; p >= 0; p-- {
+			idx[p]++
+			if idx[p] < len(alpha) {
+				break
+			}
+			idx[p] = 0
+		}
+		if p < 0 {
+			return // wrapped past the most-significant position: exhausted
+		}
+	}
+}
+
+// pow returns base**exp for non-negative exp.
+func pow(base, exp int) int {
+	r := 1
+	for i := 0; i < exp; i++ {
+		r *= base
+	}
+	return r
 }
 
 // HintKeys returns the available single-key hints for child issue navigation.

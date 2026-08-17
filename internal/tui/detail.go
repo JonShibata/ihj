@@ -151,8 +151,8 @@ func (m *DetailModel) ClearHistory() {
 
 // HintLabelLength returns the width of every hint label currently in use
 // (1 for single-char hints, 2 once the slot count overflows the alphabet,
-// 0 when no hints are active). Callers use this to decide how many
-// keystrokes to accumulate before resolving.
+// 3 or more on very large issues, 0 when no hints are active). Callers use
+// this to decide how many keystrokes to accumulate before resolving.
 func (m *DetailModel) HintLabelLength() int {
 	if len(m.hintLabels) == 0 {
 		return 0

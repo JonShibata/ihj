@@ -308,6 +308,129 @@ func TestHints_ZeroOrNegative_ReturnsNil(t *testing.T) {
 	}
 }
 
+func countLetters(rs []rune) int {
+	c := 0
+	for _, r := range rs {
+		if r >= 'a' && r <= 'z' {
+			c++
+		}
+	}
+	return c
+}
+
+func hasDigit(s string) bool {
+	for _, r := range s {
+		if r >= '0' && r <= '9' {
+			return true
+		}
+	}
+	return false
+}
+
+// TestHints_NeverStrands is the regression test for the reported bug: an
+// issue with many links must never leave a slot without a label. Hints(n)
+// must always return exactly n labels, all of uniform width and all unique,
+// no matter how large n grows or how few keys the keymap leaves free.
+func TestHints_NeverStrands(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		km   terminal.KeyMap
+	}{
+		{"default", terminal.DefaultKeyMap()},
+		{"vim", terminal.VimKeyMap()},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			for _, n := range []int{1, 5, 50, 100, 500, 1000, 5000} {
+				hints := tt.km.Hints(n)
+				if len(hints) != n {
+					t.Fatalf("Hints(%d) returned %d labels; want %d (links stranded)", n, len(hints), n)
+				}
+				width := len(hints[0])
+				seen := map[string]bool{}
+				for i, h := range hints {
+					if len(h) != width {
+						t.Errorf("Hints(%d)[%d]=%q width %d; want uniform width %d", n, i, h, len(h), width)
+					}
+					if seen[h] {
+						t.Errorf("Hints(%d): duplicate label %q", n, h)
+					}
+					seen[h] = true
+				}
+			}
+		})
+	}
+}
+
+// TestHints_PrefersLettersBeforeDigits: while the letters-only space still
+// covers n, no label should contain a digit (keeps the common case ergonomic).
+func TestHints_PrefersLettersBeforeDigits(t *testing.T) {
+	km := terminal.DefaultKeyMap()
+	letters := countLetters(km.HintKeys())
+	n := letters * letters // exactly fills the letters-only 2-char space
+	hints := km.Hints(n)
+	if len(hints) != n {
+		t.Fatalf("Hints(%d) returned %d", n, len(hints))
+	}
+	for i, h := range hints {
+		if len(h) != 2 {
+			t.Errorf("hints[%d]=%q; want width 2", i, h)
+		}
+		if hasDigit(h) {
+			t.Errorf("hints[%d]=%q; want digit-free while letters suffice", i, h)
+		}
+	}
+}
+
+// TestHints_UsesDigitsBeforeGrowingWidth: past the letters-only space but
+// within the full 2-char space, digits are pulled in rather than jumping to
+// a third character (digits are preferred over extra length).
+func TestHints_UsesDigitsBeforeGrowingWidth(t *testing.T) {
+	km := terminal.VimKeyMap()
+	alpha := km.HintKeys()
+	letters := countLetters(alpha)
+	full := len(alpha)
+	if full <= letters {
+		t.Skip("keymap left no free digits")
+	}
+	n := letters*letters + 1 // one past the letters-only 2-char space
+	if n > full*full {
+		t.Skipf("full 2-char space (%d) too small for this assertion", full*full)
+	}
+	hints := km.Hints(n)
+	if len(hints) != n {
+		t.Fatalf("Hints(%d) returned %d", n, len(hints))
+	}
+	digitSeen := false
+	for i, h := range hints {
+		if len(h) != 2 {
+			t.Fatalf("hints[%d]=%q; want width 2 (should not grow to 3 yet)", i, h)
+		}
+		if hasDigit(h) {
+			digitSeen = true
+		}
+	}
+	if !digitSeen {
+		t.Errorf("Hints(%d) used no digits; expected digit-bearing labels past the letters-only space", n)
+	}
+}
+
+// TestHints_GrowsToThreeChars: only when even the full 2-char space is
+// exhausted does the width grow, and it still returns exactly n labels.
+func TestHints_GrowsToThreeChars(t *testing.T) {
+	km := terminal.VimKeyMap()
+	full := len(km.HintKeys())
+	n := full*full + 1 // one past the full 2-char space
+	hints := km.Hints(n)
+	if len(hints) != n {
+		t.Fatalf("Hints(%d) returned %d; want %d", n, len(hints), n)
+	}
+	for i, h := range hints {
+		if len(h) != 3 {
+			t.Fatalf("hints[%d]=%q width %d; want width 3", i, h, len(h))
+		}
+	}
+}
+
 func TestHintKeys_NoDuplicates(t *testing.T) {
 	for _, tt := range []struct {
 		name string
